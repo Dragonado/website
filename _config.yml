@@ -1,0 +1,29 @@
+title: Chaithanya Shyam
+email: codecraft15@gmail.com
+description: >-
+  Personal site, projects, and writing.
+url: "https://www.chaithu.in"
+
+theme: minima
+
+minima:
+  skin: auto
+  social_links:
+    - { platform: github, user_url: "https://github.com/Dragonado" }
+
+header_pages:
+  - about.md
+  - projects.md
+
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
+permalink: /blog/:year/:month/:day/:title/
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor
+  - README.md
