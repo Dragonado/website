@@ -36,12 +36,20 @@ Recent things: EIP-7702 delegate contracts on Ethereum Sepolia, a Rust BitTorren
 
     [:octicons-arrow-right-24: View CV](cv.md)
 
+-   :material-pencil:{ .lg .middle } __Blog__
+
+    ---
+
+    Notes on things I'm building, learning, or thinking about.
+
+    [:octicons-arrow-right-24: Read posts](blog/index.md)
+
 -   :material-link-variant:{ .lg .middle } __Connect__
 
     ---
 
     Find me on LinkedIn, GitHub, or drop an email.
 
-    [:fontawesome-brands-linkedin: LinkedIn](https://www.linkedin.com/in/chaithanya-shyam-d-6854b9169/) · [:fontawesome-brands-github: GitHub](https://github.com/Dragonado)
+    [:fontawesome-brands-linkedin: LinkedIn](https://www.linkedin.com/in/chaithanya-shyam/) · [:fontawesome-brands-github: GitHub](https://github.com/Dragonado)
 
 </div>

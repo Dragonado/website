@@ -50,10 +50,18 @@ nav:
   - Home: index.md
   - About: about.md
   - Projects: projects.md
+  - Blog:
+      - blog/index.md
   - CV: cv.md
 
 plugins:
   - search
+  - blog:
+      blog_dir: blog
+      post_url_format: "{date}/{slug}"
+      post_excerpt: optional
+      archive: false
+      categories: false
 
 markdown_extensions:
   - abbr
@@ -92,7 +100,7 @@ extra:
       link: https://github.com/Dragonado
       name: GitHub
     - icon: fontawesome/brands/linkedin
-      link: https://www.linkedin.com/in/chaithanya-shyam-d-6854b9169/
+      link: https://www.linkedin.com/in/chaithanya-shyam/
       name: LinkedIn
     - icon: fontawesome/solid/paper-plane
       link: mailto:codecraft15@gmail.com

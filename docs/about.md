@@ -12,7 +12,7 @@ Outside of computing I'm a FIDE-rated chess player and a certified scuba diver.
 
 ## Elsewhere
 
--   :fontawesome-brands-linkedin: [chaithanya-shyam](https://www.linkedin.com/in/chaithanya-shyam-d-6854b9169/)
+-   :fontawesome-brands-linkedin: [chaithanya-shyam](https://www.linkedin.com/in/chaithanya-shyam/)
 -   :fontawesome-brands-github: [Dragonado](https://github.com/Dragonado)
 -   :material-file-document: [CV](cv.md)
 -   :material-email: [codecraft15@gmail.com](mailto:codecraft15@gmail.com)
