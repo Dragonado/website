@@ -4,9 +4,19 @@ title: About
 permalink: /about/
 ---
 
-A short paragraph about who you are, what you work on, and what you're interested in. Edit this page in `about.md`.
+I'm a Master's student in Computer Science at **Georgia Tech**, in the Computing Systems specialization (Aug 2025 – May 2027). I'm currently Head TA for Graduate Algorithms.
+
+Before grad school I spent two years at **Google** in Bengaluru as a Software Engineer II on backend / distributed systems — high-throughput C++ gRPC services running at 30k QPS, multi-year ETL migrations on MapReduce / BigQuery / Spanner, and ML evaluation pipelines benchmarking Gemini outputs against a Knowledge Graph truth. I did my undergrad at **NIT Karnataka** (B.Tech CS, 2019–2023).
+
+I'm a competitive programmer first and a software engineer second. **Candidate Master** on Codeforces (peak 2042) and **6-star** on CodeChef (peak 2222). I was an **ICPC 2021 Asia West** continent finalist and have set problems for ICPC 2022 regionals, CodeChef, and CodeDrills. I helped coach the Indian IOI training camp in 2023, and I'm one of the lead maintainers of [CodePal](https://marketplace.visualstudio.com/items?itemName=IEEE-NITK.codepal), a VSCode extension used by 6000+ competitive programmers worldwide.
+
+These days my technical focus is **blockchain** — Solidity, Foundry, EIP-7702, MEV / DEX mechanics, on-chain indexing — and **systems work** in C++ and Rust.
+
+Outside of computing I'm a FIDE-rated chess player and a certified scuba diver.
 
 ## Elsewhere
 
+- LinkedIn: [chaithanya-shyam](https://www.linkedin.com/in/chaithanya-shyam-d-6854b9169/)
 - GitHub: [Dragonado](https://github.com/Dragonado)
+- CV: [/cv/](/cv/)
 - Email: [codecraft15@gmail.com](mailto:codecraft15@gmail.com)

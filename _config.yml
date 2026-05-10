@@ -1,7 +1,9 @@
 title: Chaithanya Shyam
 email: codecraft15@gmail.com
 description: >-
-  Personal site, projects, and writing.
+  Chaithanya Shyam Delanthabettu — CS grad student at Georgia Tech,
+  ex-Google software engineer, competitive programmer. Distributed
+  systems and blockchain.
 url: "https://www.chaithu.in"
 
 theme: minima
@@ -10,6 +12,7 @@ minima:
   skin: auto
   social_links:
     - { platform: github, user_url: "https://github.com/Dragonado" }
+    - { platform: linkedin, user_url: "https://www.linkedin.com/in/chaithanya-shyam-d-6854b9169/" }
 
 header_pages:
   - about.md
