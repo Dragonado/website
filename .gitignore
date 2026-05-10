@@ -1,8 +1,6 @@
-_site/
-.sass-cache/
-.jekyll-cache/
-.jekyll-metadata
-vendor/
-.bundle/
-Gemfile.lock
+site/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
 .DS_Store

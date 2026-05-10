@@ -1,8 +1,4 @@
----
-layout: page
-title: About
-permalink: /about/
----
+# About
 
 I'm a Master's student in Computer Science at **Georgia Tech**, in the Computing Systems specialization (Aug 2025 – May 2027). I'm currently Head TA for Graduate Algorithms.
 
@@ -16,7 +12,7 @@ Outside of computing I'm a FIDE-rated chess player and a certified scuba diver.
 
 ## Elsewhere
 
-- LinkedIn: [chaithanya-shyam](https://www.linkedin.com/in/chaithanya-shyam-d-6854b9169/)
-- GitHub: [Dragonado](https://github.com/Dragonado)
-- CV: [/cv/](/cv/)
-- Email: [codecraft15@gmail.com](mailto:codecraft15@gmail.com)
+-   :fontawesome-brands-linkedin: [chaithanya-shyam](https://www.linkedin.com/in/chaithanya-shyam-d-6854b9169/)
+-   :fontawesome-brands-github: [Dragonado](https://github.com/Dragonado)
+-   :material-file-document: [CV](cv.md)
+-   :material-email: [codecraft15@gmail.com](mailto:codecraft15@gmail.com)
