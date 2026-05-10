@@ -4,11 +4,11 @@ hide:
   - toc
 ---
 
-# Hi, I'm Chaithanya
+# Hi, I'm Chaithanya (I also go by Chai)
 
 I'm a CS Master's student at **Georgia Tech**, formerly a software engineer at **Google**, and a long-time competitive programmer. I work mostly on distributed systems and blockchain.
 
-Recent things: EIP-7702 delegate contracts on Ethereum Sepolia, a Rust BitTorrent client from scratch, and [CodePal](https://marketplace.visualstudio.com/items?itemName=IEEE-NITK.codepal) — a VSCode extension I help maintain that's used by 6000+ competitive programmers.
+I am interested in everything CS and more.
 
 <div class="grid cards" markdown>
 
