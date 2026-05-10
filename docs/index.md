@@ -34,7 +34,7 @@ I am interested in everything CS and more.
 
     Full resume, viewable inline or downloadable as PDF.
 
-    [:octicons-arrow-right-24: View CV](cv.md)
+    [:octicons-arrow-right-24: View CV](assets/cv.pdf)
 
 -   :material-pencil:{ .lg .middle } __Blog__
 

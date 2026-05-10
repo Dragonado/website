@@ -52,7 +52,7 @@ nav:
   - Projects: projects.md
   - Blog:
       - blog/index.md
-  - CV: cv.md
+  - CV: https://www.chaithu.in/assets/cv.pdf
 
 plugins:
   - search
