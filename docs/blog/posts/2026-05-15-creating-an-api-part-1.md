@@ -18,7 +18,7 @@ The final assignment was a multi-week on-chain task on Ethereum's Sepolia testne
 
 To convince anyone to actually delegate their wallet to two random classmates, I built a live dashboard tracking every student's progress so prospective customers could see who had already taken the deal. My friend built a service that populated some data about the wallets which was being surfaced in my dashboard. 
 
-For more info on the project check out the COURSE.md [TBA Claude: insert link to the .md file]
+For more info on the project check out the [course materials](../../assets/buzz-course-materials.zip) (assignment briefs + the Solidity contracts for both Buzz 1 and Buzz 2).
 
 ### Tech stack
 
@@ -40,7 +40,9 @@ His service ran on his own machine while we developed. Mine was on Railway from 
 
 ### The actual constraint
 
-To go live I needed his service reachable from my Railway backend so the dashboard could call it on every page load. He didn't want it open to the world, just open to me. AWS security groups normally handle this with an IP allowlist, but Railway's outbound IPs are dynamic and not publishable anywhere, so "just whitelist my server" didnt work. His service was effectively behind a NAT from my perspective. [TBA Claude: explain what is NAT for me]
+To go live I needed his service reachable from my Railway backend so the dashboard could call it on every page load. He didn't want it open to the world, just open to me. AWS security groups normally handle this with an IP allowlist, but Railway's outbound IPs are dynamic and not publishable anywhere, so "just whitelist my server" didnt work. His service was effectively behind a NAT from my perspective.
+
+(For folks who haven't seen the term: NAT, or Network Address Translation, is the trick your home router uses. Many devices share one public IP, and the outside internet can't initiate a connection to a specific device behind the NAT, it can only reply to one that reached out first. His AWS box wasn't literally NATed, but the security group rule had the same effect from where I was sitting: a real public IP I just couldn't talk to.)
 
 ## Alternate solutions
 
@@ -92,7 +94,9 @@ No new dependencies. No SaaS. No widening his security group beyond the one port
 
 It's a bit surprising to me that we had to go through so much trouble to just host a simple API. There was no hard requirements on availability, latency, security, throughput. Yet we had to input a credit card on an AWS instance?
 
-[TBA Claude; Add your own thoughts here]
+And the worst part: none of the actual hard work was about the API itself. HTTP server, JSON response, done. Everything else was glue. SG rules, egress IPs, port mismatches, a tmux session keeping a python script alive. Incidental complexity end to end.
+
+The general pattern I keep running into: every cloud product is built either for one-engineer-on-localhost or for a public service at scale. There's no first-class tool for "two engineers who want to share a service privately and live." You either run it as a localhost toy or you pay for the full production stack with ingresses and TLS and IAM. The reverse-proxy hack was me wedging a third mode in between, and its a little annoying that nobody has shipped a better default for it.
 
 ## References
 - Railway: https://railway.com
