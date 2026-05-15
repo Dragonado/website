@@ -1,7 +1,7 @@
 # The simple task of hosting an API - Part 1
 
 Hello everyone, recently there was a situation where a classmate had a local service he built and I needed to access it. I will give more background later but the situation at hand is the following:
-- My friend developed an online service where one can query information about a particular blockcahin entity. He is the owner of this service and is responsible for updates.
+- My friend developed an online service where one can query information about a particular blockchain entity. He is the owner of this service and is responsible for updates.
 - I have a published user-facing dashboard that needed to call this service and surface this data to the users. I own the dashboard and am responsible for updates.
 
 
@@ -13,10 +13,12 @@ That's it. This is the abstracted view and its actually so fucking annoying how 
 My friend and I were teammates for the CS6270 Intro to Blockchain course at Georgia Tech. 
 
 ### Course project
-[TBA Claude] Rewrite this before its too much technical stuff. People wont care about the exact games. Give a little bit more high level view.
 
+The final assignment was a multi-week on-chain task on Ethereum's Sepolia testnet. Students had to clear a rubric of small on-chain milestones. Most of the class grinded for a week. My friend and I built a paid service instead: classmates signed a one-time wallet authorization, our smart contract did the whole assignment on their behalf, and we kept a cut.
 
-The final assignment was Buzzcoin Carnival 2 on Sepolia testnet: complete a rubric across seven on-chain games (mining, reentrancy exploit, two-DEX arbitrage, KOTH, mayor voting, guess-the-number, and duels) and rack up at least 50 transactions. Noe and I co-built a paid service that used EIP-7702 delegation to execute the entire assignment on classmates' wallets for a fee, plus a public dashboard tracking every student's rubric progress live so prospective customers could see who had already taken the deal.
+To convince anyone to actually delegate their wallet to two random classmates, I built a live dashboard tracking every student's progress so prospective customers could see who had already taken the deal. My friend built a service that populated some data about the wallets which was being surfaced in my dashboard. 
+
+For more info on the project check out the COURSE.md [TBA Claude: insert link to the .md file]
 
 ### Tech stack
 
@@ -38,7 +40,7 @@ His service ran on his own machine while we developed. Mine was on Railway from 
 
 ### The actual constraint
 
-To go live I needed his service reachable from my Railway backend so the dashboard could call it on every page load. He didn't want it open to the world, just open to me. AWS security groups normally handle this with an IP allowlist, but Railway's outbound IPs are dynamic and not publishable anywhere, so "just whitelist my server" was not on the table. His service was effectively behind a NAT from my perspective.
+To go live I needed his service reachable from my Railway backend so the dashboard could call it on every page load. He didn't want it open to the world, just open to me. AWS security groups normally handle this with an IP allowlist, but Railway's outbound IPs are dynamic and not publishable anywhere, so "just whitelist my server" didnt work. His service was effectively behind a NAT from my perspective. [TBA Claude: explain what is NAT for me]
 
 ## Alternate solutions
 
@@ -85,6 +87,12 @@ Railway dashboard -> AWS:80 (proxy.py, runs as root) -> 127.0.0.1:8080 (his serv
 ```
 
 No new dependencies. No SaaS. No widening his security group beyond the one port already open. No SSH tunneling, no Cloudflare workers, no negotiating IP allowlists with Railway. His service stays exactly as he wrote it. My dashboard gets its data live.
+
+## Conclusion
+
+It's a bit surprising to me that we had to go through so much trouble to just host a simple API. There was no hard requirements on availability, latency, security, throughput. Yet we had to input a credit card on an AWS instance?
+
+[TBA Claude; Add your own thoughts here]
 
 ## References
 - Railway: https://railway.com
