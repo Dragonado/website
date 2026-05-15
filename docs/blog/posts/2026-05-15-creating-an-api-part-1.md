@@ -1,3 +1,7 @@
+---
+date: 2026-05-15
+---
+
 # The simple task of hosting an API - Part 1
 
 Hello everyone, recently there was a situation where a classmate had a local service he built and I needed to access it. I will give more background later but the situation at hand is the following:
