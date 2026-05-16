@@ -1,10 +1,12 @@
 ---
 date: 2026-05-15
+draft: true
 ---
 
 # The simple task of hosting an API - Part 1
 
 Hello everyone, recently there was a situation where a classmate had a local service he built and I needed to access it. I will give more background later but the situation at hand is the following:
+
 - My friend developed an online service where one can query information about a particular blockchain entity. He is the owner of this service and is responsible for updates.
 - I have a published user-facing dashboard that needed to call this service and surface this data to the users. I own the dashboard and am responsible for updates.
 
@@ -27,12 +29,14 @@ For more info on the project check out the [course materials](../../assets/buzz-
 ### Tech stack
 
 **His side:**
+
 - Stdlib python HTTP server (threaded `http.server`)
 - SQLite for storage
 - A scraper that fetched Sepolia blocks and traced every `[CALL]` frame inside each tx, attributing each call back to the EOA it should count for
 - Two routes: `/<addr>/txn.txt` (per-wallet plain text list of relevant txs) and `/api/dashboard` (JSON aggregate across all wallets)
 
 **My side:**
+
 - Node.js / Express backend
 - better-sqlite3 for storage
 - WebSocket for live tx broadcasts to the frontend
@@ -53,10 +57,12 @@ To go live I needed his service reachable from my Railway backend so the dashboa
 ### Batch job
 
 Pros:
+
 - Just send a .txt file periodically.
 - No network handshake between us. He pushes to S3 or a public URL, I pull from it on a cron.
 
 Cons:
+
 - Not live.
 - Data is as stale as the last sync. If a user opens the dashboard 5 minutes after activity, they see old numbers.
 - I have to host the .txt files somewhere too, doubling storage and adding a second thing that can break.
@@ -64,11 +70,13 @@ Cons:
 ### Clone the service locally
 
 Pros:
+
 - Zero network hops, zero firewall headaches.
 - My dashboard works even if his box is offline.
 - Latency is whatever SQLite gives me, which is microseconds.
 
 Cons:
+
 - I had to periodicially sync the code with the latest push.
 - His service has its own scraping pipeline and database. Cloning isn't just the code, its running another instance of his entire infra.
 - Defeats split ownership. If anything breaks I have to debug his stack instead of mine.
@@ -103,6 +111,7 @@ And the worst part: none of the actual hard work was about the API itself. HTTP 
 The general pattern I keep running into: every cloud product is built either for one-engineer-on-localhost or for a public service at scale. There's no first-class tool for "two engineers who want to share a service privately and live." You either run it as a localhost toy or you pay for the full production stack with ingresses and TLS and IAM. The reverse-proxy hack was me wedging a third mode in between, and its a little annoying that nobody has shipped a better default for it.
 
 ## References
+
 - Railway: https://railway.com
 - Code: https://github.com/Dragonado/carnival-deal (proxy lives at `upstream-proxy/proxy.py`)
 - Dashboard: https://carnival-deal-production.up.railway.app
