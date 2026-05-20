@@ -45,6 +45,8 @@ This is the machine that will be hosting my server. I will be using my Macbook M
 
 ### Big picture
 
+![Network setup: MacBook ↔ Wi-Fi access point ↔ Raspberry Pi, with SSH (encrypted) and the actual client/server traffic (unencrypted) as the two paths](../../assets/api-setup-network-diagram.jpg)
+
 As mentioned before, I will be using my Pi as the server and I will be editing the Pi files on my Mac via SSH. I will also be using my mac to act as a client to ping the server. So there are two paths from my Mac to the pi.
 
 One thing to note is that my ISP doesn't provide a global static IP address. So for now I can only access this server from the devices connected to my wifi. I also don't want to disble my firewalls and expose any port to the open internet. I am smart enough to know that I'm not yet skilled in cybersec to play with these configurations.
@@ -61,11 +63,28 @@ And now I ssh into the machine from my mac.
 chaithanyashyamd@Chaithanyas-MacBook-Air ~ % ssh chaithu@raspberrypi.local
 ```
 
-Wait, I can just do "chaithu@raspberrypi.local" instead of an IP address? 
+Wait, I can just do `chaithu@raspberrypi.local` instead of inputting an IP address? 
 
+### mDNS
+
+IP addresses provided by my WiFi access points are not really static. They change every X minutes (TBA Claude). Even though its a slow refresh, it's a bit of a pain to find out its IP address each time so I just use the **mDNS**, I'm sure nothing can go wrong with this simple hack. (_subtle foreshadowing_)
+
+mDNS is a really neat protocol for resolving hostnames to IP addresses of devices in a local network. Basically my Mac sends a multicast query to all the devices in my network. My Pi sees this call and responds with a similar multicast query with the IP address it owns. 
+
+```zsh
+chaithanyashyamd@Chaithanyas-MacBook-Air ~ % ping -q -c 10 raspberrypi.local 
+PING raspberrypi.local (192.168.1.24): 56 data bytes
+
+--- raspberrypi.local ping statistics ---
+10 packets transmitted, 10 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 16.264/30.368/52.540/12.168 ms
+```
+
+We can see that the `raspberrypi.local` resolves to `192.168.1.24` and a ping takes ~30ms on average.
 
 ## References
 
 - [Beej](https://beej.us/guide/bgnet/) - Truly one of the best intro guides out there for learning about socket programming in Unix.
 - [10. Measurement and Timing](https://youtu.be/LvX3g45ynu8?list=PLUl4u3cNGP63VIBQVWguXxZZi0566y7Wf) - taught me the philosophy & correctness of accurate measurement.
+- [mDNS wikipedia](https://en.wikipedia.org/wiki/Multicast_DNS)
 - Claude Code & Gemini for answering all my doubts, especially about the syscalls and the Pi.
