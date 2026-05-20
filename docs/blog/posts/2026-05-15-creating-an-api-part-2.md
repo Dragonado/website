@@ -1,6 +1,5 @@
 ---
 date: 2026-05-15
-draft: true
 ---
 
 # The simple task of hosting an API - Part 2 [TBA]
@@ -81,6 +80,113 @@ round-trip min/avg/max/stddev = 16.264/30.368/52.540/12.168 ms
 ```
 
 We can see that the `raspberrypi.local` resolves to `192.168.1.24` and a ping takes ~30ms on average.
+
+### Server Code
+
+Now this is the most fun part! Writing the code for the server. For maximum learning I decided to use C/C++. I would use pure C but multithreading in C is an absolute pain point and I would rather much deal with `std::thread` for this project.
+
+Lets start with a very simple bare-bones server. I wont explain most of the code since it's basic stuff. I highly recommend reading the Beej networking guide to learn the basics. It's a really good tutorial after which I went from 0 to basic socket programmer that can understand the man pages of the network syscalls.
+
+```cpp
+#include <iostream>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <cassert>
+#include <arpa/inet.h>
+#include <unistd.h>
+
+void set_socket_to_listen(int s){
+    struct sockaddr_in addr;
+    addr.sin_family      = AF_INET; // use IPv4 or IPv6
+    addr.sin_port        = htons(8080); // set port 8080
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);   // set wildcard matching on IP address. 
+    // This means that the kernel will listen to all IP addresses that this machine owns.
+    
+    int yes = 1;
+    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes); // free the socket if its being used by someone else.
+
+    int b = bind(s, (struct sockaddr*)&addr, sizeof addr);
+    if (b < 0) { perror("bind"); exit(1); }
+    
+    int l = listen(s, 1); // accept atmost 1 connection into the queue. Drop the rest.
+    if (l < 0) { perror("listen"); exit(1); }
+}
+
+int accept_from_queue_and_return_fd(int s){
+    struct sockaddr_storage their_addr;
+    socklen_t addr_size = sizeof their_addr;
+    return accept(s, (struct sockaddr*)&their_addr, &addr_size);
+}
+
+ssize_t perform_logic_and_populate_response(const char *req_buf, int req_size, char *res_buf, int res_size){
+    int num = atoi(req_buf); // atoi will default to 0 on bad char*.
+
+    if(num <= 0) return snprintf(res_buf, res_size, "Invalid\n");
+    if(num & 1)return snprintf(res_buf, res_size, "Odd\n"); 
+    else return snprintf(res_buf, res_size, "Even\n");
+}
+
+int main(){
+    // INITIALIZE A SOCKET.
+    int s = socket(AF_INET, SOCK_STREAM, 0); 
+    if (s < 0) { perror("socket"); return 1; }
+
+    // SETUP THE SOCKET TO LISTEN FOR TCP connections.
+    set_socket_to_listen(s);
+
+    while(true){
+        // ESTABLISH CONNECTION.
+        int fd = accept_from_queue_and_return_fd(s);
+        if(fd < 0) continue; // failed to establish connection.
+
+        char req_buf[20], res_buf[20];
+
+        // RECEIVE REQUEST
+        ssize_t num_bytes_read = recv(fd, req_buf, sizeof req_buf - 1, 0);
+        if(num_bytes_read <= 0){
+            close(fd);
+            continue; // failed to recieve a request.
+        }
+        req_buf[num_bytes_read] = '\0';
+
+        // PERFORM LOGIC.
+        ssize_t num_bytes_written = perform_logic_and_populate_response(req_buf, num_bytes_read, res_buf, sizeof res_buf);
+
+        // SEND RESPONSE.
+        ssize_t num_bytes_sent = send(fd, res_buf, num_bytes_written, 0);
+        
+        // CLOSE CONNECTION.
+        close(fd); // close the connection.
+    }
+
+    return 0;
+}
+```
+
+Some things to note:
+
+- Server is running on port 8080
+- Server accepts atmost 1 connection in its queue as seen on the `listen()` command
+- All the API is doing is returning if the given number is Odd or even with some basic error handling.
+
+Let's try to run it on my Pi.
+
+```bash
+chaithu@raspberrypi:~/Desktop/server $ g++ single_thread.cpp -o server && ./server
+```
+
+and on my Mac I query the server.
+
+```zsh
+chaithanyashyamd@Chaithanyas-MacBook-Air ~ % echo "100" | nc raspberrypi.local 8080 
+Even
+```
+
+Absolute success!
+
+Most of it is basic boiler plate code. If you want to change the API, literally the only thing that needs to be changed is the `perform_logic_and_populate_response` function. Wow that's very generic and solid. Maybe I'm now ready to join the Google Boq team?
+
 
 ## References
 
