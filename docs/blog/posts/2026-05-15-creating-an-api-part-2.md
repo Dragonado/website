@@ -191,7 +191,7 @@ Also a neat thing to notice is that this communication is completely unencrypted
 
 Sure, technically this is a valid server API that people can now query for their needs. But how good is it? How good can we make it? What does "good" even mean?
 
-There are many measures of what a good server should be. For examply you can optimise for metrics like:
+There are many measures of what a good server should be. For example you can optimise for metrics like:
 
 - Throughput - how many queries can the server respond to?
 - Latency - how long does it take to get a response?
@@ -201,6 +201,118 @@ There are many measures of what a good server should be. For examply you can opt
 - etc
 
 For now, I can only care about throughput and latency. This setup is pretty bad reliability wise because it's literally just one machine that could go off at any time. CPU and memory is anyway a physical limitation that I can't really change.
+
+### Baseline
+
+I asked Claude to make a stress test script using python. So with this I can basically control the QPS (queries per second) and then measure the success rate and the latencies.
+
+You can find it on my github [here](TBA Claude).
+
+The setup is, I send a linearly increasing load for the first few seconds to eliminate any cold start issues occuring on the client or network or the server side. I then maintain a steady state of given QPS limit for the given duration.
+
+Latency numbers are only taken from the steady state phase but I still chart the entire load.
+
+Here is a basic sanity check of the script:
+
+```zsh
+(.venv) chaithanyashyamd@Chaithanyas-MacBook-Air IPServer % python3 stress.py --host raspberrypi.local --qps 10 --warmup 1 --steady 5
+
+[client] target raspberrypi.local:8080  qps=10  warmup=1.0s  steady=5.0s  timeout=15.0s
+[client] expected attempts: ~5 (warmup) + 50 (steady) = 55
+[client] log: stress_log.jsonl
+[client] schedule: 5 warmup + 50 steady = 55 total
+[client] query mode: varying — payload = 1 + (rid-1) % 1000, expected = Odd/Even per parity
+[client] issued 55 requests in 5.90s (target 6s); awaiting in-flight...
+[client] all in-flight complete at 6.59s
+[client] wrote 55 records to stress_log.jsonl
+
+=== Warmup phase (n=5) ===
+  Correct  :       5  (100.0%)
+  Wrong    :       0  (  0.0%)
+  Errors   :       0  (  0.0%)
+    ok                                                                 5  (100.0%)
+
+=== Steady phase (n=50) ===
+  Correct  :      50  (100.0%)
+  Wrong    :       0  (  0.0%)
+  Errors   :       0  (  0.0%)
+    ok                                                                50  (100.0%)
+
+=== Latency — steady phase, anchored to t_scheduled (n=50) ===
+metric                                   count       min       avg       p50       p90       p99     p99.9       max
+connect_ms  (scheduled -> connected)        50   114.124   230.030   187.249   398.705   642.742   685.527   690.281
+ttfb_ms     (scheduled -> 1st byte)         50   135.634   299.521   211.728   589.575   930.229   974.246   979.137
+total_ms    (scheduled -> close)            50   135.743   320.891   211.909   689.777  1121.291  1201.245  1210.129
+queue_ms    (scheduled -> start)            50     0.142     1.170     1.239     1.440     2.386     2.707     2.743
+
+  queue_ms is the client-side delay: how late the coroutine started vs its
+  scheduled time. Should be ~0 when not saturated; growing means coordination
+  omission is happening and tail latencies are real (not artifacts).
+
+Achieved issue rate (steady phase): 10.2 q/s over 4.90s
+[client] wrote chart to stress_chart.png
+```
+
+Yay, looks like everything works correctly. Average latency is 300ms whereas 99% of the packets complete within 1.1s
+
+This is a good baseline.
+
+NOTE: These latency numbers bascially measure the network and socket handling. The actual API itself (code inside the while loop) is super fast. All it does is, recieve 20 bytes of data, does a few operations and branches (deciding if number is odd/even) and then sends 20 bytes of data. All this is in the order of micro-seconds and hence not a bottleneck for our case. 
+
+[TBA Claude: add the chart]
+
+### Maximum throughput
+
+#### Increasing the Accept Queue size
+
+Lets just run the sanity check again.
+
+```zsh
+(.venv) chaithanyashyamd@Chaithanyas-MacBook-Air IPServer % python3 stress.py --host raspberrypi.local --qps 10 --warmup 1 --steady 1 
+
+[client] target raspberrypi.local:8080  qps=10  warmup=1.0s  steady=1.0s  timeout=15.0s
+[client] expected attempts: ~5 (warmup) + 10 (steady) = 15
+
+=== Warmup phase (n=5) ===
+  Correct  :       0  (  0.0%)
+  Wrong    :       0  (  0.0%)
+  Errors   :       5  (100.0%)
+    timeout                                                            5  (100.0%)
+
+=== Steady phase (n=10) ===
+  Correct  :       0  (  0.0%)
+  Wrong    :       0  (  0.0%)
+  Errors   :      10  (100.0%)
+    timeout                                                           10  (100.0%)
+```
+
+Whaaaaat? Why is everything failing? My Pi is working completely fine and its not down. The server is still running, I literally queried it a bunch of times before running the above stress test. I haven't rebuilt the binary or anything. And I'm still running a small stress test (10QPS) so its not a performance issue.
+
+Can you guess why? Its a not-so popular cybersecurity attack that accidentally happened here due to my bad coding configurations. No, its not DDoS but close.
+
+[TBA Claude] add spoiler html tag here.
+
+It's the [Slowloris attack](https://en.wikipedia.org/wiki/Slowloris_(cyber_attack)). I can't believe I discovered this from first principles.
+
+My current implementation of the server tells the kernel to only keep an accept queue of size `1` as seen on my `listen(fd, 1)` command. So any connections arriving that come after this queue are dropped. This is whats happening here, my server has a full queue and is unable to accept any more requests.
+
+Why is my queue full though? Shouldn't my server just `recv()` the connection and serve it and free the queue?
+
+It's because my beautiful single-threaded program is stuck on the very same `recv()` connection and cannot move on. I mentioned that I ran a bunch of queries before running this one and I didn't rebuild the binary right? Turns out that the one of the connections did not end gracefully (or end at all). The server accepted the connections, took the request and served it. My mac should be happy with this and must have sent a `FIN` packet indiciating the end of the TCP session. 
+
+However, looks like this packet never reached the Pi (due to WiFi packet loss maybe? it happens a lot so not surprised) and so my Pi is keeping the connection alive in hopes of getting a response back. The default time to live by the kernel is set to ~2hrs!!!
+
+I would have a very hard time to debug this without Claude. It gave me a bunch of things I could try and I was able to diagnose this and confirm that this is indeed the case using the `ss` command to inspect the connections on the `8080` port.
+
+The fix? Simple. Kill the server, increase the queue size to maximum, rebuild the binary and start the server again.
+
+This obviously also increases the the throughput of the server because we can now handle more connections.
+
+
+
+## Conclusion
+
+I need to learn more about networks. Getting a good grasp on all the 7 layers of OSI is necessary. I need to know the difference between SYN queues, TLS handshakes, WPA security, [TBA claude].
 
 ## References
 
