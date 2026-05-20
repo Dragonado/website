@@ -2,7 +2,7 @@
 date: 2026-05-15
 ---
 
-# The simple task of hosting an API - Part 2 [TBA]
+# The simple task of hosting an API
 
 
 ## Motivation
@@ -183,10 +183,24 @@ chaithanyashyamd@Chaithanyas-MacBook-Air ~ % echo "100" | nc raspberrypi.local 8
 Even
 ```
 
-Absolute success!
+Absolute success! Most of it is basic boiler plate code. If you want to change the API, literally the only thing that needs to be changed is the `perform_logic_and_populate_response` function.
 
-Most of it is basic boiler plate code. If you want to change the API, literally the only thing that needs to be changed is the `perform_logic_and_populate_response` function. Wow that's very generic and solid. Maybe I'm now ready to join the Google Boq team?
+Also a neat thing to notice is that this communication is completely unencrypted (you might have observed this in my diagram). So anyone inside my wifi network can snoop around and intercept this communication with a simple `tcpdump` command.
 
+## Stress test
+
+Sure, technically this is a valid server API that people can now query for their needs. But how good is it? How good can we make it? What does "good" even mean?
+
+There are many measures of what a good server should be. For examply you can optimise for metrics like:
+
+- Throughput - how many queries can the server respond to?
+- Latency - how long does it take to get a response?
+- Reliability - Does the server have any downtime?
+- CPU usage
+- Memory usage
+- etc
+
+For now, I can only care about throughput and latency. This setup is pretty bad reliability wise because it's literally just one machine that could go off at any time. CPU and memory is anyway a physical limitation that I can't really change.
 
 ## References
 
