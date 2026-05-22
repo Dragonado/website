@@ -263,7 +263,7 @@ NOTE: These latency numbers bascially measure the network and socket handling. T
 
 ### Maximum throughput
 
-#### Increasing the Accept Queue size
+#### Increasing the Accept Queue size because someone attacked my server
 
 Lets just run the sanity check again.
 
@@ -286,37 +286,58 @@ Lets just run the sanity check again.
     timeout                                                           10  (100.0%)
 ```
 
-Whaaaaat? Why is everything failing? My Pi is working completely fine and its not down. The server is still running, I literally queried it a bunch of times before running the above stress test. I haven't rebuilt the binary or anything. And I'm still running a small stress test (10QPS) so its not a performance issue.
+Whaaaaat? Why is everything failing? My Pi is working completely fine and there was no downtime. The server is still running, I literally queried it a bunch of times just before running the above stress test. I haven't rebuilt the binary or anything. And I'm just running a small stress test (10QPS) so its not a performance issue. Yet, the queries are timing out.
 
 Can you guess why? Its a not-so popular cybersecurity attack that accidentally happened here due to my bad coding configurations. No, its not DDoS but close.
 
 [TBA Claude] add spoiler html tag here.
 
-It's the [Slowloris attack](https://en.wikipedia.org/wiki/Slowloris_(cyber_attack)). I can't believe I discovered this from first principles.
+It's the [Slowloris attack](https://en.wikipedia.org/wiki/Slowloris_(cyber_attack)), more technically it's a Slowloris-like attack since this attack works on HTTP requests whereas my issue is a TCP one. It's basically a type of [slow DoS attack](https://en.wikipedia.org/wiki/Slow_DoS_attack) where a malicious user causes unavaibility of the service by sending partial requests to keep the connection alive and reducing the server's connection capacity. Obviously mine wasn't a malicious user but an accidental occurence of this attack.
 
 My current implementation of the server tells the kernel to only keep an accept queue of size `1` as seen on my `listen(fd, 1)` command. So any connections arriving that come after this queue are dropped. This is whats happening here, my server has a full queue and is unable to accept any more requests.
 
-Why is my queue full though? Shouldn't my server just `recv()` the connection and serve it and free the queue?
+Why is my queue full though? Shouldn't my server just `accept()` the connection and serve it and free the queue?
 
-It's because my beautiful single-threaded program is stuck on the very same `recv()` connection and cannot move on. I mentioned that I ran a bunch of queries before running this one and I didn't rebuild the binary right? Turns out that the one of the connections did not end gracefully (or end at all). The server accepted the connections, took the request and served it. My mac should be happy with this and must have sent a `FIN` packet indiciating the end of the TCP session. 
+It's because my beautiful single-threaded program is stuck on the blocking `recv()` call and cannot move on. I mentioned that I ran a bunch of queries before running this one and I didn't rebuild the binary right? Turns out that the one of the queries did not behave correctly.
 
-However, looks like this packet never reached the Pi (due to WiFi packet loss maybe? it happens a lot so not surprised) and so my Pi is keeping the connection alive in hopes of getting a response back. The default time to live by the kernel is set to ~2hrs!!!
+It looks like one of the queries, after establishing a connection with my Pi, never sent its request bytes via `send()` (due to WiFi packet loss maybe? it happens a lot so not surprised) and so my Pi is keeping the connection alive in hopes of getting a request back. This is the slowloris-like attack that happened to me :'(. 
 
-I would have a very hard time to debug this without Claude. It gave me a bunch of things I could try and I was able to diagnose this and confirm that this is indeed the case using the `ss` command to inspect the connections on the `8080` port.
+Unfortunately, [TCP keep-alive](https://tldp.org/HOWTO/TCP-Keepalive-HOWTO/overview.html) config is set off by default, so the server would be held hostage forever by one bad packet loss. While turning on the TCP keep-alive would eventually clean up connections lost to packet loss, a malicious actor could still bypass by ack'ing the TCP keep-alive calls but still not send any request bytes.
 
-The fix? Simple. Kill the server, increase the queue size to maximum, rebuild the binary and start the server again.
+I would have a very hard time to debug this flaky issue without Claude. It gave me a bunch of things I could try and I was able to diagnose this and confirm that this is indeed the case using the `ss` (socket statistics) command to inspect the socket connections on the `8080` port.
 
-This obviously also increases the the throughput of the server because we can now handle more connections.
+The fix? Make `recv` non blocking using the `epoll` syscall. Using `epoll` we can choose to only repy to those connections that are active.
+
+Workaround for now:
+
+- Kill the server
+- Increase the queue size to maximum (which is `4096` for my Pi)
+- Set a timeout on the `recv()` syscall (I will use this stopgap measure for now instead of `epoll`)
+- Rebuild the binary.
+- Start the server again.
+
+Increasing the accept queue size increases the the throughput of the server because we can answer more queries by queuing them instead of dropping. However, this clearly doesn't change the number of queries we can respond to **per second** because we are not any faster.
+
+This gives us around 80QPS at the same 1.1s latency
+
+![](../../assets/stress_chart_single_thread_80.png)
+
+To make our server answer more queries per second, we must add a bit of non-blocking because we are making our thread sit idle on the`recv` to get its bytes from a particular connection but there might be another connection with its request bytes ready that can be served. 
+
+### Epoll
 
 
 
 ## Conclusion
 
-I need to learn more about networks. Getting a good grasp on all the 7 layers of OSI is necessary. I need to know the difference between SYN queues, TLS handshakes, WPA security, [TBA claude].
+I need to learn more about networks. Getting a good grasp on all the 7 layers of OSI is necessary. I need to know more about file descriptors, how epoll works, SYN queues, TLS handshakes, WPA security, [TBA claude].
 
 ## References
 
+- https://mishal23.github.io/back-to-academia/.
 - [Beej](https://beej.us/guide/bgnet/) - Truly one of the best intro guides out there for learning about socket programming in Unix.
 - [10. Measurement and Timing](https://youtu.be/LvX3g45ynu8?list=PLUl4u3cNGP63VIBQVWguXxZZi0566y7Wf) - taught me the philosophy & correctness of accurate measurement.
 - [mDNS wikipedia](https://en.wikipedia.org/wiki/Multicast_DNS)
 - Claude Code & Gemini for answering all my doubts, especially about the syscalls and the Pi.
+- https://tldp.org/HOWTO/TCP-Keepalive-HOWTO/overview.html
+- Epoll: https://copyconstruct.medium.com/the-method-to-epolls-madness-d9d2d6378642
