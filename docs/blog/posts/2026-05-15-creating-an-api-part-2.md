@@ -326,7 +326,30 @@ To make our server answer more queries per second, we must add a bit of non-bloc
 
 ### Epoll
 
+#### Epoll + blocking I/O
 
+Gives me around 100 QPS but its because I wrote it wrong.
+
+#### Epoll + non blocking I/O
+
+
+#### Fixing errors
+
+mDNS cannot handle such large query requests. so we need to manually resolve.
+Increase stack limit in server with ulimit.
+
+
+
+#### Bottleneck is wifi
+
+## Latency optisations
+
+mDNS bypass
+2.4G -> 5G
+move laptop closer to wifi
+ethernet cable
+Even though my pi has 4 cores, multi-threading wont help in this case because its limited by wifi.
+epoll LT -> ET because fewer wakeups
 
 ## Conclusion
 
