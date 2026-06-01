@@ -81,7 +81,7 @@ round-trip min/avg/max/stddev = 16.264/30.368/52.540/12.168 ms
 
 We can see that `raspberrypi.local` resolves to `192.168.1.24` and a ping takes ~30 ms on average.
 
-### Server Code
+### 1. Server Code
 
 Now this is the most fun part! Writing the code for the server. For maximum learning I decided to use C++. I would use pure C, but multithreading in C is an absolute pain and I would much rather deal with `std::thread` if I needed it. As it turns out, I didn't end up using multithreading at all.
 
@@ -269,7 +269,7 @@ Something is clearly broken. A Pi 5 should not collapse at 60 QPS. Time to figur
 
 ### Optimisations
 
-#### Increasing the Accept Queue size because someone attacked my server
+#### 2. Increasing the Accept Queue size because someone attacked my server
 
 ##### The attack
 
@@ -295,6 +295,8 @@ Before I dig into the staircase collapse, here is how I actually first noticed s
 ```
 
 Whaaaaat? Why is everything failing? My Pi is working completely fine and there was no downtime. The server is still running, I literally queried it a bunch of times just before running this stress test. I haven't rebuilt the binary or anything. And I'm only running a small 10 QPS stress test, so it's not a performance issue. Yet every query times out.
+
+##### The analysis
 
 It's a not-so-popular cybersecurity attack that I triggered accidentally with my bad socket configuration. Not DDoS, but close. Do you want to guess what?
 
@@ -324,6 +326,7 @@ The proper fix is to make `recv` non-blocking via the `epoll` syscall. With `epo
 
 This is also exactly what made the staircase chart above so brutal: at 60+ QPS the accept queue (size 1) overflows almost instantly, and once anything blocks in `recv` the queue stays full.
 
+##### The (temporary) fix
 Workaround for now:
 
 - Kill the server.
@@ -351,7 +354,7 @@ To make our server answer more queries per second, we have to introduce non-bloc
 
 There are two ways to use `epoll`, and the difference is more important than it looks.
 
-#### Epoll + blocking I/O
+##### 3. Epoll + blocking I/O
 
 My first version of the epoll server was me trying to code it after reading the official epoll documentation. Full source: [`3_epoll_single_blocking_io.cpp`](https://github.com/Dragonado/IPServer/blob/main/3_epoll_single_blocking_io.cpp).
 
@@ -428,7 +431,7 @@ int main(){
     return 0;
 }
 ```
-Looks good right? Yes, I'm technically using epoll and the code should run correctly, but something looks sus. It can't be that easy to make it concurrent right?
+Looks good! Yes, I'm technically using epoll and the code should run correctly, but something looks sus. It can't be that easy to make it concurrent right?
 
 ??? question "Is this actually concurrent? (click to reveal)"
     Absolutely not. If you look closely, I'm still fully blocked on `recv` and `send`. My single thread sits idle until `recv` has received all the bytes for that one connection. So I'm interacting with exactly one connection at a time, from start to finish. This is **NOT** concurrency.
@@ -442,7 +445,7 @@ What I just did:
 - Close the connection.
 - Repeat.
 
-I'm literally crying dawg :cry:, this is exactly what I was doing before but now with more overhead because I'm using a fancy connection selection algorithm from the queue.
+This is hilariously wrong. I'm literally crying dawg :cry:, this is exactly what I was doing with server 2 but now with more overhead because I'm using a fancy connection selection algorithm from the queue.
 
 ![Flowchart: epoll wrapper around a still-blocking handler. The thread serializes on every recv/send.](../../assets/flowchart_epoll_blocking_wrong.png)
 
@@ -472,7 +475,7 @@ The correct usage lets me save the state of a connection, make partial progress,
 
 
 
-#### Epoll + non-blocking I/O
+##### 4. Epoll + non-blocking I/O
 
 The proper version puts every file descriptor into non-blocking mode via `fcntl(fd, F_SETFL, O_NONBLOCK)` and refactors the connection handler into a **state machine** that lives on the heap, keyed by the file descriptor. Each connection owns a struct with its read buffer, write buffer, byte counters, and current state (`READING_REQUEST` vs `WRITING_RESPONSE`). Source: [`4_epoll_single_non_blocking_io.cpp`](https://github.com/Dragonado/IPServer/blob/main/4_epoll_single_non_blocking_io.cpp).
 
