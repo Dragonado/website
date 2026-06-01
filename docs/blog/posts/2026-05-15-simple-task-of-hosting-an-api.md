@@ -13,56 +13,56 @@ I was so mind-boggled with this question. Is this such a casual question to ask 
 
 I played it off cool and said "Nah bro, I don't have a server right now" to which he just said "Cool, I'll just rent an AWS box then. There should be a free trial available".
 
-This was the end of the conversation but it stuck with me for quite a while. As a grad student at Georgia Tech in CS, I should not be stumped with this simple question, so I decided to learn a little about networks and write this blog on "**the simple task of hosting an API**".
+This was the end of the conversation but it stuck with me for quite a while. As a grad student at Georgia Tech in CS, I should not be stumped by this simple question, so I decided to learn a little about networks and write this blog on "**the simple task of hosting an API**".
 
 Also, my friend is joining Jane Street. So maybe it is a casual question to ask for someone like him ¯\\\_(ツ)\_/¯
 
 
 ## Background
 
-I used to work at Google as a SWE before, and I always took infra work like hosting an API for granted. If I needed to serve a service to someone in Google, all I had to do was spin up a [Boq node](https://www.reddit.com/r/programming/comments/s21wti/comment/hsculqs/) (the internal microservice framework) and all the boilerplate work would be taken care of. I just needed to define the IO parameters, write the service part, and send the endpoint (provided by the internal load balancer) to my colleague who wanted the service.
+I used to work at Google as a SWE, and I always took infra work like hosting an API for granted. If I needed to expose a service to someone at Google, all I had to do was spin up a [Boq node](https://www.reddit.com/r/programming/comments/s21wti/comment/hsculqs/) (the internal microservice framework) and the boilerplate would be taken care of. I just needed to define the IO parameters, write the handler, and send the endpoint (provided by the internal load balancer) to my colleague who wanted the service.
 
-Of course it's only this simple for experimental work. For production grade services an engineer has to ensure the protobufs match the client requirements + debugging information, add unit tests, regression tests, end-to-end tests, functional tests, load tests, analyze user behaviour, analyze system usage, etc.
+Of course, it's only this simple for experimental work. For production-grade services an engineer has to ensure the protobufs match the client requirements (plus debugging hooks), add unit tests, regression tests, end-to-end tests, functional tests, load tests, analyse user behaviour, analyse system usage, and so on.
 
-Joining Google Ads straight out of undergrad was an opportunity that I will forever be grateful for. I had immense growth both professionally and personally. I learnt a great deal of software engineering and how production code is supposed to be shipped that can handle planet-scale. So while I learnt a great deal of **using** planet-scale infra, I was severely lacking in technical abilities of actually **building** a planet-scale infra. I came away with a lot: strong software engineering habits, real fluency in writing documentation, deep domain knowledge of Ads, and good intuition for how users and advertisers actually behave. What I didn't come away with was experience on the deep technical layer like improving the load balancer, shaving boot-time latency of Borg machines, that kind of work.
+Joining Google Ads straight out of undergrad was an opportunity that I will forever be grateful for. I had immense growth both professionally and personally. I learnt a great deal of software engineering and how production code is supposed to be shipped at planet scale. So while I learnt a great deal about **using** planet-scale infra, I was severely lacking the experience of actually **building** it. I came away with a lot: strong software engineering habits, real fluency in writing documentation, deep domain knowledge of Ads, and good intuition for how users and advertisers actually behave. What I didn't come away with was experience on the deep technical layer like improving the load balancer, shaving boot-time latency off Borg machines, that kind of work.
 
-So I joined back academia. Case in point, here is a [blog post](https://mishal23.github.io/back-to-academia/) from another Google engineer (and friend) about going back to academia. We share the same sentiment but reached different conclusions. He chose to stay in Google and pursued an online masters from Georgia Tech part time. I chose to leave Google and pursue an in-person masters degree from Georgia Tech full time. Note to the reader: there is no right/wrong answer in our decisions here.
+So I came back to academia. Case in point, here is a [blog post](https://mishal23.github.io/back-to-academia/) from another Google engineer (and friend) about going back to academia. We share the same sentiment but reached different conclusions. He chose to stay at Google and pursue an online master's from Georgia Tech part-time. I chose to leave Google and pursue an in-person master's degree from Georgia Tech full-time. Note to the reader: there is no right/wrong answer in our decisions here.
 
 ## Hardware
 
-The easiest solution was to input my credit card into one of the cloud providers (AWS/GCP/Oracle) and get an instance of one of their machines that I can ssh into. Basically what my friend ended up doing. But I don't want to do that for several reasons. 
+The easiest solution was to input my credit card into one of the cloud providers (AWS/GCP/Oracle) and get an instance of one of their machines that I can SSH into. Basically what my friend ended up doing. But I don't want to do that for several reasons.
 
-So what I'm gonna do is use my fully decked-out Raspberry Pi 5 that has been sitting idle in my closet for the past 3 years. This Pi comes with a cooling fan + 128 GB SD storage + 2.4GHz quad-core Arm Cortex-A76 + 8GB RAM running the Linux-based Raspberry Pi OS.
+So what I'm going to do is use my fully decked-out Raspberry Pi 5 that has been sitting idle in my closet for the past 3 years. This Pi comes with a cooling fan, 128 GB SD storage, a 2.4 GHz quad-core Arm Cortex-A76, and 8 GB RAM, running the Linux-based Raspberry Pi OS.
 
 Looks something like this before assembling:
 
-![](https://www.canakit.com/Media/700/2915.jpg)
+![Raspberry Pi 5 kit before assembly: board, cooler, SD card, case](https://www.canakit.com/Media/700/2915.jpg)
 
-This is the machine that will be hosting my server. I will be using my MacBook M1 Air that acts as a client querying the server.
+This is the machine that will be hosting my server. I will be using my MacBook M1 Air as the client to query it.
 
 ## Setup
 
 ### Big picture
 
-![](../../assets/api-setup-network-diagram.jpg)
+![Network setup: MacBook ↔ Wi-Fi access point ↔ Raspberry Pi, with SSH (encrypted) and the actual client/server traffic (unencrypted) as the two paths](../../assets/api-setup-network-diagram.jpg)
 
-As mentioned before, I will be using my Pi as the server and I will be editing the Pi files on my Mac via SSH. I will also be using my Mac to act as a client to ping the server. So there are two paths from my Mac to the Pi.
+As mentioned before, I will be using my Pi as the server and I will be editing the Pi's files on my Mac via SSH. My Mac will also act as the client that pings the server. So there are two paths from my Mac to the Pi.
 
-One thing to note is that my ISP doesn't provide a global static IP address. So for now I can only access this server from the **devices connected to my Wi-Fi**. If I want to host it on the open internet then I would also need to disable my firewalls and expose my ports. I am smart enough to know that I'm not yet skilled in cybersec to play with these configurations, so I shall not venture into this yet.
+One thing to note is that my ISP doesn't provide a global static IP address. So for now I can only access this server from **devices connected to my Wi-Fi**. If I wanted to host it on the open internet, I would also need to disable my firewall and expose ports. I am smart enough to know that I'm not yet skilled enough in cybersecurity to play with these configurations, so I shall not venture there yet.
 
-Before running the server, we need to get the machine running first. The Canakit version I bought comes with the Raspberry Pi OS pre-loaded, so I really don't have to do anything here. All I need to do is turn it on and enable ssh on this machine.
+Before running the server, we need to get the machine running first. The Canakit version I bought comes with Raspberry Pi OS pre-loaded, so I really don't have to do anything here. All I need to do is turn it on and enable SSH on it.
 
 ```bash
 raspberrypi:~ $ sudo systemctl enable --now ssh
 ```
 
-And now I ssh into the machine from my mac.
+And now I SSH into the machine from my Mac.
 
 ```zsh
 MacBook-Air ~ % ssh chaithu@raspberrypi.local
 ```
 
-Wait, I can just do `chaithu@raspberrypi.local` instead of inputting an IP address?
+Wait, I can just type `chaithu@raspberrypi.local` instead of an IP address?
 
 ### mDNS
 
@@ -79,11 +79,11 @@ PING raspberrypi.local (192.168.1.24): 56 data bytes
 round-trip min/avg/max/stddev = 16.264/30.368/52.540/12.168 ms
 ```
 
-We can see that `raspberrypi.local` resolves to `192.168.1.24` and a ping takes ~30ms on average.
+We can see that `raspberrypi.local` resolves to `192.168.1.24` and a ping takes ~30 ms on average.
 
 ### Server Code
 
-Now this is the most fun part! Writing the code for the server. For maximum learning I decided to use C++. I would use pure C but multithreading in C is an absolute pain point and I would much rather deal with `std::thread` for this project. However, I didn't end up using multithreading for this project.
+Now this is the most fun part! Writing the code for the server. For maximum learning I decided to use C++. I would use pure C, but multithreading in C is an absolute pain and I would much rather deal with `std::thread` if I needed it. As it turns out, I didn't end up using multithreading at all.
 
 Let's start with a very simple bare-bones server. I won't explain most of the code since it's basic stuff. I highly recommend reading the [Beej networking guide](https://beej.us/guide/bgnet/) to learn the basics. It's a really good tutorial after which I went from 0 to a basic socket programmer that can understand the man pages of the network syscalls.
 
@@ -166,54 +166,54 @@ int main(){
 
 Some things to note:
 
-- Server is running on port 8080.
-- Server accepts at most 1 connection in its queue as seen on the `listen()` command.
-- All the API is doing is returning whether the given number is Odd or Even, with some basic error handling.
+- The server runs on port 8080.
+- The server accepts at most 1 connection in its queue, as seen in the `listen()` call.
+- The API just returns whether the given number is Odd or Even, with some basic error handling.
 
-Let's try to run it on my Pi.
+Let's run it on my Pi:
 
 ```bash
 raspberrypi:~/Desktop/server $ g++ single_thread.cpp -o server && ./server
 ```
 
-and on my Mac I query the server.
+And on my Mac I query the server:
 
 ```zsh
 MacBook-Air ~ % echo "100" | nc raspberrypi.local 8080
 Even
 ```
 
-Absolute success! Most of it is basic boilerplate code. If you want to change the API, literally the only thing that needs to be changed is the `perform_logic_and_populate_response` function.
+Absolute success! Most of this is basic boilerplate. if you want to change the API, the only thing that needs to change is the `perform_logic_and_populate_response` function.
 
-Also a neat thing to notice is that this communication is completely unencrypted (you might have observed this in my diagram). So anyone inside my Wi-Fi network can snoop around and intercept this communication with a simple `tcpdump` command.
+Also, notice that this communication is completely unencrypted (you might have spotted this in my diagram). Anyone inside my Wi-Fi network can snoop around and intercept these bytes with a simple `tcpdump` command.
 
 ## Stress test
 
-Sure, technically this is a valid server API that people can now query for their needs. But how good is it? How good can we make it? What does "good" even mean?
+Sure, technically this is a valid server API that people can now query. But how good is it? How good can we make it? What does "good" even mean?
 
-There are many measures of what a good server should be. For example you can optimise for metrics like:
+There are many measures of what a good server should be. You can optimise for metrics like:
 
-- Throughput: how many queries can the server respond to?
-- Latency: how long does it take to get a response?
-- Reliability: does the server have any downtime?
+- **Throughput**: how many queries can the server respond to?
+- **Latency**: how long does each response take?
+- **Reliability**: does the server have any downtime?
 - CPU usage
 - Memory usage
 - etc.
 
-For now, I only care about throughput and latency. This setup is pretty bad reliability-wise because it's literally just one machine that could go off at any time. CPU and memory are anyway a physical limitation that I can't really change.
+For now, I only care about throughput and latency. This setup is pretty bad reliability-wise because it's literally one machine that could go off at any time. CPU and memory are physical limitations I can't really change.
 
 ### Baseline
 
-I asked Claude to make a stress test script using python. So with this I can basically control the QPS (queries per second) and then measure the success rate and the latencies.
+I asked Claude to make a stress test script in Python. With this I can drive the server at any QPS schedule I want and measure the success rate and per-request latencies. You can find the script on my GitHub [here](https://github.com/Dragonado/IPServer/blob/main/stress.py).
 
-You can find it on my github [here](https://github.com/Dragonado/IPServer/blob/main/stress.py).
+The setup that gives me the most informative single test is a **staircase load**: 10 plateaus at 10, 60, 110, 160, 210, 260, 310, 360, 410, 460 QPS, each plateau held for 10 seconds. That is **23,500 total attempts** in a ~100-second run, sweeping from "everything will succeed" through the server's knee and into the saturation zone.
 
-[TBA Claude] update setup.
-The setup is: I send a linearly increasing load for the first few seconds to eliminate any cold start issues occurring on the client, network, or the server side. I then maintain a steady state at the given QPS limit for the given duration.
+A couple of things that broke while I was doing stress testing:
 
-Latency numbers are only taken from the steady state phase but I still chart the entire load.
+- **mDNS fails under load**: mDNS resolution under load drops 6–11% of lookups because the kernel cannot resolve this many requests this fast even though its cached. These errors which would show up as client errors and contaminate the server measurements. So I just use the fixed IP address given by my wifi AP which looks something like `192.168.1.13:8080`.
+- **file descriptor limit.** macOS defaults to 256 open files (since everything is a file in Unix, even connections are considered files). The python stress script opens connections far faster than they tear down, so I run `ulimit -n 65536` in the shell first. Without this, the stress test starts returning `EMFILE` error and the failures look like server bugs.
 
-Here is a basic sanity check of the script:
+Before the full staircase, a quick sanity check at 10 QPS for 5 seconds to confirm the binary is alive:
 
 ```zsh
 (.venv) MacBook-Air IPServer % python3 stress.py --host raspberrypi.local --qps 10 --warmup 1 --steady 5
@@ -254,15 +254,18 @@ Achieved issue rate (steady phase): 10.2 q/s over 4.90s
 [client] wrote chart to stress_chart.png
 ```
 
-[TBA Claude] add the correct chart and update numbers,
-Yay, looks like everything works correctly. Average latency is 300ms whereas 99% of the packets complete within 1.1s.
+Looks like the server is alive. Average end-to-end latency is around 320 ms and p99 is around 1.1 s for this tiny 50-request sample. 
 
-This is a good baseline.
+!!! info "What these latency numbers actually measure"
+    They are almost entirely network and socket handling, not the API itself. The code inside the `while` loop receives ~20 bytes, runs a couple of branches (odd vs even), and sends ~20 bytes back. That's microseconds of work. Every millisecond you see in the table above is TCP handshake, Wi-Fi airtime, kernel scheduling, and teardown.
 
-!!! info "What these latency numbers actually measure" 
-These latency numbers basically measure the network and socket handling. The actual API itself (code inside the `while` loop) is super fast. All it does is receive 20 bytes of data, do a few operations and branches (deciding if the number is odd/even), and then send 20 bytes of data. All this is in the order of microseconds and hence not a bottleneck for our case.
+The sanity check only exercises the bottom step of the staircase — 10 QPS, where the server is comfortable. The real question is what happens as we climb. Time for the full staircase against the same `single_thread` server (source: [`1_single_thread.cpp`](https://github.com/Dragonado/IPServer/blob/main/1_single_thread.cpp)):
 
-![Baseline stress chart: 10 QPS for 5 seconds against the single-threaded server](../../assets/stress_chart_baseline.png)
+![Staircase stress chart for the single-threaded server (backlog=1): 100% success at 10 QPS, collapses by 60 QPS, dead by 110 QPS](../../assets/experiment_results/chart_1_single_thread.png)
+
+The numbers are grim. Out of 23,500 attempts, **only 155 succeed (0.7%)**. The server holds 100% success at 10 QPS (p50 92 ms, p99 776 ms) and then falls off a cliff: 91% errors at 60 QPS, 100% errors from 110 QPS onward. Most failures are timeouts, with a third showing up as connection-refused.
+
+Something is clearly broken. A Pi 5 should not collapse at 60 QPS. Time to figure out why.
 
 ### Optimisations
 
@@ -270,7 +273,7 @@ These latency numbers basically measure the network and socket handling. The act
 
 ##### The attack
 
-Let's just run the sanity check again.
+Before I dig into the staircase collapse, here is how I actually first noticed something was wrong. The staircase chart is the polished retrospective. What actually happened, chronologically, was something even more stupid: out of curiosity I reran the small 10 QPS sanity check from before and now even *that* failed completely with 0% of queries succeeding.
 
 ```zsh
 (.venv) MacBook-Air IPServer % python3 stress.py --host raspberrypi.local --qps 10 --warmup 1 --steady 1
@@ -291,68 +294,66 @@ Let's just run the sanity check again.
     timeout                                                           10  (100.0%)
 ```
 
-Whaaaaat? Why is everything failing? My Pi is working completely fine and there was no downtime. The server is still running, I literally queried it a bunch of times just before running the above stress test. I haven't rebuilt the binary or anything. And I'm just running a small stress test (10 QPS) so it's not a performance issue. Yet, the queries are timing out.
+Whaaaaat? Why is everything failing? My Pi is working completely fine and there was no downtime. The server is still running, I literally queried it a bunch of times just before running this stress test. I haven't rebuilt the binary or anything. And I'm only running a small 10 QPS stress test, so it's not a performance issue. Yet every query times out.
 
-#### What was it?
-Can you guess why? It's a not-so-popular cybersecurity attack that accidentally happened here due to my bad coding configurations. No, it's not DDoS but close.
+It's a not-so-popular cybersecurity attack that I triggered accidentally with my bad socket configuration. Not DDoS, but close. Do you want to guess what?
 
-<details>
-<summary><b>Click to reveal the answer</b></summary>
+??? question "What was it? (click to reveal)"
+    
 
-It's the [Slowloris attack](https://en.wikipedia.org/wiki/Slowloris_(cyber_attack)) — or more technically, a Slowloris-*like* attack, since the classic Slowloris works on HTTP requests whereas my issue is at the TCP layer.
+    It's the [Slowloris attack](https://en.wikipedia.org/wiki/Slowloris_(cyber_attack)) or more technically, a Slowloris-*like* attack, since classic Slowloris works on HTTP requests whereas my issue is at the TCP layer.
 
-</details>
+It's a type of [slow DoS attack](https://en.wikipedia.org/wiki/Slow_DoS_attack) where a malicious actor causes the service to become unavailable by sending partial requests that hold the connection alive and starve the server's connection capacity. Mine wasn't malicious though, it was accidental.
 
-It's basically a type of [slow DoS attack](https://en.wikipedia.org/wiki/Slow_DoS_attack) where a malicious user causes unavailability of the service by sending partial requests to keep the connection alive and reducing the server's connection capacity. Obviously mine wasn't a malicious user but an accidental occurrence of this attack.
+??? question "What happened? (click to reveal)"
+    My current implementation tells the kernel to only keep an accept queue of size `1` (`listen(fd, 1)`). Any connections arriving after the queue is full are silently dropped by the kernel. My server has a full queue and is unable to accept any more requests.
 
-#### What happened?
+!!! question "Why did this happen?"
+    Why is the queue full, though? Shouldn't my server just `accept()` the connection, serve it, and free the queue?
 
-My current implementation of the server tells the kernel to only keep an accept queue of size `1` as seen on my `listen(fd, 1)` command. So any connections arriving after this queue is full are silently dropped by the kernel. This is what's happening here — my server has a full queue and is unable to accept any more requests.
+    Because my beautiful single-threaded program is stuck inside the blocking `recv()` call and cannot move on. I mentioned that I ran a bunch of queries before this one and I didn't rebuild the binary, right? Turns out one of those queries didn't behave correctly.
 
-#### Why did it happen?
+It looks like one of the earlier queries established a connection with my Pi but never sent its request bytes (Wi-Fi packet loss, most likely since it happens a lot). My Pi is keeping the connection alive in hopes of getting the request back. That's the Slowloris-like attack that happened to me (by me :'( ).
 
-Why is my queue full though? Shouldn't my server just `accept()` the connection and serve it and free the queue?
+!!! warning "TCP keep-alive doesn't save you here"
+    [TCP keep-alive](https://tldp.org/HOWTO/TCP-Keepalive-HOWTO/overview.html) is **off by default**, so the server is held hostage forever by one lost packet. While turning on TCP keep-alive would eventually clean up connections lost to packet loss, a malicious actor could still bypass it.
 
-<details>
-<summary><b>Click to reveal the answer</b></summary>
+I would have had a very hard time debugging this flaky issue without Claude. It gave me a bunch of things to try, and I was able to confirm the diagnosis using the `ss` (socket statistics) command to inspect the active socket connections on port `8080`.
 
-It's because my beautiful single-threaded program is stuck on the blocking `recv()` call and cannot move on. I mentioned that I ran a bunch of queries before running this one and I didn't rebuild the binary, right? Turns out that one of the queries did not behave correctly.
+The proper fix is to make `recv` non-blocking via the `epoll` syscall. With `epoll` I can choose to only handle connections that actually have data.
 
-</details>
-
-It looks like one of the queries, after establishing a connection with my Pi, never sent its request bytes (due to Wi-Fi packet loss maybe? it happens a lot so not surprised) and so my Pi is keeping the connection alive in hopes of getting a request back. This is the Slowloris-like attack that happened to me :'(.
-
-Unfortunately, [TCP keep-alive](https://tldp.org/HOWTO/TCP-Keepalive-HOWTO/overview.html) is off by default, so the server would be held hostage forever by one bad packet loss. While turning on TCP keep-alive would eventually clean up connections lost to packet loss, a malicious actor could still bypass it.
-
-I would have had a very hard time debugging this flaky issue without Claude. It gave me a bunch of things I could try and I was able to diagnose this and confirm that this is indeed the case using the `ss` (socket statistics) command to inspect the socket connections on port `8080`.
-
-The proper fix is to make `recv` non-blocking using the `epoll` syscall. With `epoll` we can choose to only handle connections that are actually active.
+This is also exactly what made the staircase chart above so brutal: at 60+ QPS the accept queue (size 1) overflows almost instantly, and once anything blocks in `recv` the queue stays full.
 
 Workaround for now:
 
 - Kill the server.
-- Increase the queue size to the system maximum (which is `4096` on my Pi, set by `/proc/sys/net/core/somaxconn`).
-- Set a timeout on the `recv()` syscall via `SO_RCVTIMEO` (stopgap measure for now instead of `epoll`).
+- Increase the queue size to the system maximum (`4096` on my Pi, set by `/proc/sys/net/core/somaxconn`).
+- Set a timeout on the `recv()` syscall via `SO_RCVTIMEO` (stopgap instead of `epoll`).
 - Rebuild the binary.
 - Start the server again.
 
-Increasing the accept queue size increases the throughput of the server because we can answer more queries by queuing them instead of dropping them. However, this doesn't change the number of queries we can respond to **per second** because we aren't any faster. The queue is a shock absorber, not a speed-up.
+Increasing the accept queue size increases the throughput of the server because we can answer more queries by queuing them instead of dropping them. However, it doesn't change the number of queries we can respond to **per second**, because we aren't any faster per request. The queue is a shock absorber, not a speed-up.
 
-[TBA: add correct numbers] This gives us around 80 QPS at the same 1.1s p99 latency:
+Here is the staircase against this patched server (source: [`2_single_thread_max_queue.cpp`](https://github.com/Dragonado/IPServer/blob/main/2_single_thread_max_queue.cpp)):
 
-![Stress chart for the single-threaded server with a 4096 backlog](../../assets/stress_chart_single_thread_80.png)
+![Staircase stress chart for the single-threaded server with backlog=4096: 100% success up to 160 QPS, knee around 210 QPS](../../assets/experiment_results/chart_2_single_thread_max_queue.png)
 
-To make our server answer more queries per second, we have to add some non-blocking, because right now we are making our thread sit idle in `recv` waiting for one particular connection's bytes when there might be another connection with its request bytes already ready and waiting to be served.
+The same code with one integer changed (`listen(s, 1)` → `listen(s, 4096)`) goes from **0.7% to 24.1% overall success**: 5,675 / 23,500 succeed. At 10 QPS the p50 drops to **58 ms** (vs. 92 ms on server 1). It now holds 100% success all the way through 160 QPS, where p50 is around 68 ms and p99 around 415 ms. The knee is at ~210 QPS, and by 260 QPS everything times out again.
+
+!!! tip "Lesson: `listen(s, N)` is the most important number you set on the listener"
+    Going from `backlog=1` to `backlog=4096` bought roughly **16× more sustainable QPS**. Backlog isn't speed but it's burst tolerance. With a tiny backlog, one slow handler or a momentary kernel hiccup instantly fills the queue and the kernel starts dropping SYNs. With a large backlog, the kernel can absorb thousands of pending connections while userspace drains.
+
+To make our server answer more queries per second, we have to introduce non-blocking I/O. Right now the thread sits idle inside `recv` waiting for one particular connection's bytes, even when other connections already have their bytes sitting in the kernel buffer, ready to be served.
 
 #### Epoll
 
-`epoll` is Linux's mechanism for asking the kernel "here's a bunch of file descriptors I care about and wake me when *any* of them have something I can do."
+`epoll` is Linux's mechanism for asking the kernel "here is a bunch of file descriptors I care about, wake me when *any* of them have something I can do."
 
 There are two ways to use `epoll`, and the difference is more important than it looks.
 
 #### Epoll + blocking I/O
 
-My first version of the epoll server was me trying to code it after reading the official epoll documentation.
+My first version of the epoll server was me trying to code it after reading the official epoll documentation. Full source: [`3_epoll_single_blocking_io.cpp`](https://github.com/Dragonado/IPServer/blob/main/3_epoll_single_blocking_io.cpp).
 
 
 ```cpp
@@ -427,119 +428,209 @@ int main(){
     return 0;
 }
 ```
-Yes I'm techinically using epoll and the code should run correctly but I'm not leveraging epoll correctly. I seem to have added some concurrency here but is it correct? 
+Looks good right? Yes, I'm technically using epoll and the code should run correctly, but something looks sus. It can't be that easy to make it concurrent right?
 
-<details>
-<summary><b>Click to reveal the answer</b></summary>
-
-Absolutely not! because if you notice, I'm still fully blocked on `recv` and `send`. My single thread needs to wait idle until `recv` is ready to recieve all its bytes. So I'm interacting with exactly 1 connection at a time from the connection start to connection end. This is **NOT** concurrency.
-
-</details>
+??? question "Is this actually concurrent? (click to reveal)"
+    Absolutely not. If you look closely, I'm still fully blocked on `recv` and `send`. My single thread sits idle until `recv` has received all the bytes for that one connection. So I'm interacting with exactly one connection at a time, from start to finish. This is **NOT** concurrency.
 
 What I just did:
 
-- Get a connection from `epoll`.
-- Open the connection. 
-- Serve the connection.
+- Get a ready file descriptor from `epoll_wait`.
+- Open or read the connection.
+- Block on `recv` until the full request arrives.
+- Process and block on `send`.
 - Close the connection.
 - Repeat.
 
-[TBA insert flowchart]
+I'm literally crying dawg :cry:, this is exactly what I was doing before but now with more overhead because I'm using a fancy connection selection algorithm from the queue.
 
-What I should be doing:
+![Flowchart: epoll wrapper around a still-blocking handler. The thread serializes on every recv/send.](../../assets/flowchart_epoll_blocking_wrong.png)
 
-- Get a connection from epoll.
-- Open the connection.
-- Serve the connection as much as I can.
-- The moment I become idle, save the state of the connection and put it back on the epoll.
-- Since I'm idle again, I'm free to work the next connection I get from the epoll.
-- If the connection I served is complete, close the connection.
-- Repeat.
 
-[TBA insert flowchart]
+!!! danger "Anti-pattern: epoll wrapper around a blocking handler"
+    This pattern *looks* like high-performance event-driven concurrency, but the actual behaviour is identical to a single-threaded blocking loop. You pay the extra cost of `epoll_wait` + `epoll_ctl` syscalls and get nothing back. Always pair `epoll` with non-blocking I/O and per-connection state otherwise you've just made the "one connection at a time, serially" server.
 
-Clearly, using `epoll` is more complicated than I thought but the correct usage allows me to save the state of a connection and do partial progress and work on other stuff concurrently and not sit idle. This is where the massive potential for gains awaits.
+![Staircase stress chart for the epoll + blocking I/O server: same throughput as server 2, but worse latency under load](../../assets/experiment_results/chart_3_epoll_blocking_io.png)
 
-What I did here is just add a fancier selection algorithm on getting which connection to interact with but the underlying concurrency model is still "one request at a time, serially."
+The numbers confirm it. This server compiles, runs, and sustains **~160 QPS at 100% success** with the knee at ~210 QPS which is exactly the same as server 2. The latency is measurably *worse*, though: p50 at 160 QPS jumps from 68 ms (server 2) to 267 ms here, because every event now pays the extra `epoll_wait` round-trip and a redundant `setsockopt(SO_RCVTIMEO)` per accept.
 
-This is a real anti-pattern: it *looks* like I'm doing some fancy concurrency stuff but it's just fluff and no real advantage because I'm using it wrongly.
+This is what I *should* be doing with `epoll`:
 
-This compiles, runs, and handles around 100 QPS which is exactly the same as before.
+- Get a ready file descriptor (fd) from `epoll_wait`.
+- Look up the per-connection state.
+- Do as much work as possible without blocking: `recv` until `EAGAIN`, parse if I can, `send` until `EAGAIN`.
+- The moment the kernel says "no more bytes right now," save the connection's state and return to `epoll_wait`.
+- The thread is now free to work on whatever other fd is ready.
+- When the kernel later signals the same fd is ready again, resume the state machine where it left off.
+- When the response is fully sent, close the fd and free the state.
 
-[TBA insert image of chart].
+![Flowchart: epoll plus non-blocking I/O plus a per-connection state machine. Every recv/send returns immediately on EAGAIN; the thread moves on.](../../assets/flowchart_epoll_nonblocking_correct.png)
+
+The correct usage lets me save the state of a connection, make partial progress, and work on other connections instead of sitting idle. That's where the real concurrency gains live.
+
+[TBA: add better flowcharts].
+
+
 
 #### Epoll + non-blocking I/O
 
-The proper version puts every file descriptor into non-blocking mode via `fcntl(fd, F_SETFL, O_NONBLOCK)` and refactors the connection handler into a **state machine** that lives on the heap, keyed by the file descriptor. Each connection has a struct holding its read buffer, write buffer, byte counters, and current state (`READING_REQUEST` vs `WRITING_RESPONSE`).
+The proper version puts every file descriptor into non-blocking mode via `fcntl(fd, F_SETFL, O_NONBLOCK)` and refactors the connection handler into a **state machine** that lives on the heap, keyed by the file descriptor. Each connection owns a struct with its read buffer, write buffer, byte counters, and current state (`READING_REQUEST` vs `WRITING_RESPONSE`). Source: [`4_epoll_single_non_blocking_io.cpp`](https://github.com/Dragonado/IPServer/blob/main/4_epoll_single_non_blocking_io.cpp).
 
 The flow becomes:
 
-1. `epoll_wait` returns "fd X has an event."
-2. Look up the per-connection state via `data.ptr` (the kernel hands you back whatever pointer you stashed when you registered the fd — no hash table lookup needed).
-3. Do whatever work you can — `recv` bytes, parse if you've seen `\n`, `send` bytes if you have a response — and on `EAGAIN`, return immediately. The thread is now free to handle other connections.
-4. When the kernel has more to tell us about this fd, `epoll_wait` will return it again and we resume the state machine where we left off.
+1. `epoll_wait` returns "fd X has an event".
+2. Look up the per-connection state via `data.ptr` (the kernel hands you back whatever pointer you stashed when you registered the fd).
+3. Do whatever work is possible right now: 
+    - If reading then `recv` bytes as much as possible or until you see a newline.
+    - If writing then `send` bytes as much as possible or until you're finished. 
+4. When the kernel has more to tell us about this fd, `epoll_wait` returns it again and we resume the state machine where we left off.
+5. The thread is now free to handle other connections.
 
-The key insight: with blocking I/O, a single connection's network round-trips are *serialized* on the thread. With non-blocking I/O + epoll, the kernel runs each connection's network work *in parallel* underneath, and the thread only does the userspace bits when they're ready. The CPU still runs serially, but the *waiting* now happens in parallel across connections.
+!!! note "The key insight"
+    Notice that the CPU still runs serially with a single thread, but this time the *waiting* now happens in parallel across connections.
 
-On the same Wi-Fi network with the same protocol, this version handles **~250 QPS at 100% success**, with the knee starting around 300 QPS. About 3× more than the blocking version, and at much lower latency at any given load.
+This version sustains **~210 QPS at 100% success**, with the knee around 260 QPS which is about **25–30% more sustainable throughput than the well-tuned blocking server (server 2)**. The latency gap shows up exactly where you'd expect: at 210 QPS server 4 holds p50 109 ms with 100% success, while server 2 is already at 15% failure with p50 175 ms and a long tail.
 
-![Stress chart for the proper epoll server: staircase test from 10 to 500 QPS](../../assets/stress_chart_epoll_nonblocking.png)
+At the very bottom of the staircase, this server's p50 at 10 QPS is **53 ms** — which is going to matter in the next section, because that number turns out to be quite close to the theoretical Wi-Fi RTT floor.
 
-#### Fixing errors I hit along the way
+![Staircase stress chart for the proper epoll + non-blocking server: 100% success up to 210 QPS, knee at ~260 QPS](../../assets/experiment_results/chart_4_epoll_non_blocking_io.png)
 
-A couple of unrelated problems showed up when I cranked the stress test up:
+#### Bottleneck is Wi-Fi 
 
-- **mDNS resolution started failing under load.** Asyncio in my stress harness was opening thousands of connections per second, and each one was triggering an mDNS lookup. mDNS is multicast UDP with no retries; under burst load some lookups get dropped, and they bubble up as `EAI_NONAME` errors. **Fix:** resolve the Pi's IP once with `dscacheutil`, then pass the bare IP to the stress test. mDNS is for finding the Pi the first time; it's not built for benchmark traffic.
+[TBA: needs to be fact checked]
 
-- **My Mac hit its file descriptor limit.** The default `ulimit -n` on macOS is something embarrassing like 256. Asyncio happily opens thousands of sockets at once and the kernel returns `EMFILE` (errno 24, "too many open files"). **Fix:** `ulimit -n 65536` in the shell before running the stress test.
+Once the server architecture itself is no longer the bottleneck, the Wi-Fi link is. Two back-of-the-envelope calculations confirm this, and they're worth working through.
 
-Both of these are client-side problems, not server-side, but they show up as failures in the stress test, so they have to be eliminated before you can interpret the real server numbers.
+!!! note "Throughput math: why the ceiling is ~250 QPS"
+    Each request lifecycle takes about **8 frames** on the wire — SYN, SYN-ACK, ACK, the request data, the response data, FIN, FIN-ACK, final ACK.
 
-#### Bottleneck is Wi-Fi
+    At 802.11 small-packet airtime of roughly 360 µs per frame (DIFS ≈ 28 µs + average backoff ≈ 135 µs + PHY preamble + payload + SIFS + ACK), the theoretical Wi-Fi small-packet PPS ceiling is:
 
-Once everything else is cleaned up, the server stops being the bottleneck and the Wi-Fi link itself becomes the limit. Two back-of-envelope calculations confirm this.
+    `1 / 360 µs ≈ 2,780 PPS`
 
-**Throughput math.** Each request lifecycle takes about 8 frames on the wire — SYN, SYN-ACK, ACK, the request data, the response data, FIN, FIN-ACK, final ACK. At 802.11 small-packet airtime of roughly 350 µs per frame (DIFS + backoff + PHY + payload + SIFS + ACK), the theoretical Wi-Fi PPS ceiling is about 2,800. Real-world degradation (interference, retransmits, neighbor traffic) drops sustained PPS to ~1,500–2,500. Divide by 8 frames per request: **190–310 QPS**. We measure ~250. Right in the middle.
+    Real-world degradation from interference, retransmits, and neighbour BSS traffic drops sustained PPS to ~1,500–2,500. Divide by 8 frames per request:
 
-**Latency math.** Each request needs 3 sequential round-trips — handshake, request/response, teardown. Ping RTT on this network is ~18 ms. 3 × 18 ms = **54 ms minimum**. Our measured p50 at 10 QPS is 53 ms. Within 2% of the theoretical floor.
+    `1,500 PPS / 8 ≈ 190 QPS`  
+    `2,500 PPS / 8 ≈ 310 QPS`
+
+    Our measured ceiling sits between ~210 (sustained 100%) and ~260 (knee). Right in the middle of that range.
+
+!!! note "Latency math: why p50 floors at ~50 ms"
+    Each request needs **3 sequential round-trips**:
+`the answer is unintuitive: the server is barely doing any work at all.
+
+!!! note "Throughput math: why the ceiling is ~250 QPS"
+    Each request lifecycle takes about **8 frames** on the wire — SYN, SYN-ACK, ACK, the request data, the response data, FIN, FIN-ACK, final ACK.
+
+    At 802.11 small-packet airtime of roughly 360 µs per frame (DIFS ≈ 28 µs + average backoff ≈ 135 µs + PHY preamble + payload + SIFS + ACK), the theoretical Wi-Fi small-packet PPS ceiling is:
+
+    `1 / 360 µs ≈ 2,780 PPS`
+
+    Real-world degradation from interference, retransmits, and neighbour BSS traffic drops sustained PPS to ~1,500–2,500. Divide by 8 frames per request:
+
+    `1,500 PPS / 8 ≈ 190 QPS`  
+    `2,500 PPS / 8 ≈ 310 QPS`
+
+    Our measured ceiling sits between ~210 (sustained 100%) and ~260 (knee). Right in the middle of that range.
+
+!!! note "Latency math: why p50 floors at ~50 ms"
+    Each request needs **3 sequential round-trips**:
+`the answer is unintuitive: the server is barely doing any work at all.
+
+!!! note "Throughput math: why the ceiling is ~250 QPS"
+    Each request lifecycle takes about **8 frames** on the wire — SYN, SYN-ACK, ACK, the request data, the response data, FIN, FIN-ACK, final ACK.
+
+    At 802.11 small-packet airtime of roughly 360 µs per frame (DIFS ≈ 28 µs + average backoff ≈ 135 µs + PHY preamble + payload + SIFS + ACK), the theoretical Wi-Fi small-packet PPS ceiling is:
+
+    `1 / 360 µs ≈ 2,780 PPS`
+
+    Real-world degradation from interference, retransmits, and neighbour BSS traffic drops sustained PPS to ~1,500–2,500. Divide by 8 frames per request:
+
+    `1,500 PPS / 8 ≈ 190 QPS`  
+    `2,500 PPS / 8 ≈ 310 QPS`
+
+    Our measured ceiling sits between ~210 (sustained 100%) and ~260 (knee). Right in the middle of that range.
+
+!!! note "Latency math: why p50 floors at ~50 ms"
+    Each request needs **3 sequential round-trips**:
+`the answer is unintuitive: the server is barely doing any work at all.
+
+!!! note "Throughput math: why the ceiling is ~250 QPS"
+    Each request lifecycle takes about **8 frames** on the wire — SYN, SYN-ACK, ACK, the request data, the response data, FIN, FIN-ACK, final ACK.
+
+    At 802.11 small-packet airtime of roughly 360 µs per frame (DIFS ≈ 28 µs + average backoff ≈ 135 µs + PHY preamble + payload + SIFS + ACK), the theoretical Wi-Fi small-packet PPS ceiling is:
+
+    `1 / 360 µs ≈ 2,780 PPS`
+
+    Real-world degradation from interference, retransmits, and neighbour BSS traffic drops sustained PPS to ~1,500–2,500. Divide by 8 frames per request:
+
+    `1,500 PPS / 8 ≈ 190 QPS`  
+    `2,500 PPS / 8 ≈ 310 QPS`
+
+    Our measured ceiling sits between ~210 (sustained 100%) and ~260 (knee). Right in the middle of that range.
+
+!!! note "Latency math: why p50 floors at ~50 ms"
+    Each request needs **3 sequential round-trips**:
+```
+    1. Handshake: SYN → SYN-ACK → ACK
+    2. Request → response
+    3. Teardown: FIN → FIN-ACK → final ACK
+
+    Measured RTT on this network (via `ping`) is ~12–28 ms; call it ~18 ms typical. Three RTTs:
+
+    `3 × 18 ms = 54 ms minimum`
+
+    Server 4's measured p50 at 10 QPS is **53 ms** — within 2% of the theoretical floor. The server is doing essentially no observable work; the 53 ms is entirely Wi-Fi airtime.
 
 So our throughput is Wi-Fi-PPS-bound, and our latency is Wi-Fi-RTT-bound. A faster server architecture cannot improve either number on this network. The bottleneck has migrated out of our code entirely.
 
 ## Latency optimisations
 
-If the network is the limit, the only way to reduce latency is to change the network or change the protocol. In rough order of how much they help:
+If the network is the limit, the only way to reduce latency is to change the network or change the protocol. Here are some things that I didn't try but I imagine would work:
 
-- **Use the bare IP, not the mDNS hostname.** Eliminates the variable cost of mDNS resolution per connection, which can otherwise add tens of milliseconds (or fail under load).
-- Move closer to wifi access point.
-- **Move to 5 GHz Wi-Fi if you're on 2.4 GHz.** Less interference from neighbors, microwaves, Bluetooth, and your fridge. Lower latency, much lower variance.
-- **Move closer to the access point.** Stronger signal = fewer retransmits at the radio layer = lower jitter. This is the kind of thing you stop noticing until you measure it.
-- **Switch to Ethernet.** This is the single biggest possible win. Gigabit Ethernet has sub-millisecond RTT and ~10,000× the small-packet PPS budget of typical Wi-Fi. The 50 ms p50 latency would drop to ~1 ms.
-- **Persistent connections.** Right now we open a new TCP connection per request, paying ~3 RTTs of handshake/teardown overhead for every single response. If clients reused one connection for many requests (HTTP keep-alive style), we'd amortize that cost to near zero. This is a protocol change, not a network change.
-- **`EPOLLET` instead of level-triggered.** Edge-triggered epoll fires only on state transitions instead of every time an fd is ready, so it generates fewer wakeups at high load. Worth a few percent at saturation; not a game-changer.
+- **Use bare IP instead of mDNS**: A cached mDNS query takes only a few milliseconds but a fresh call will cost you a second or two. Doesn't apply here anyway since I was using bareIP but good to know.
+- **Move to 5 GHz Wi-Fi if you're on 2.4 GHz.** Lower latency, much lower variance. Since use 5 GHz has a shorter range, I was on 2.4GHz in my experiment because my laptop was in a different room than the access point.
+- **Move closer to the access point.** Taking this straight from the HFT playbook lol.
+- **Switch to Ethernet**: This is probably biggest possible win. Gigabit Ethernet has sub-millisecond RTT and ~10,000× the small-packet PPS budget of typical Wi-Fi. The 50 ms p50 latency would drop to ~1 ms.
+- **Persistent connections**: Right now we open a new TCP connection per request, paying ~3 RTTs of handshake/teardown overhead for every single response. If clients reused one connection for many requests (HTTP keep-alive style), we'd amortise that cost to near zero. But this is a client side protocol change, not a network change.
 
-One thing that would *not* help on Wi-Fi: **adding more cores.** My Pi has 4 cores; the obvious next step is `SO_REUSEPORT` and one process per core, which on Ethernet would push throughput close to 4× higher. But on Wi-Fi the radio is shared by all processes on the machine — adding cores doesn't increase the PPS the radio can deliver. This is a classic "scale the wrong dimension" trap. The right answer here is to plug in an Ethernet cable first, *then* think about multiple processes.
+
+!!! warning "Anti-pattern: scaling the wrong dimension"
+    One would think that the obvious next step on a 4-core Pi is to use all 4 cores. However, on **Wi-Fi**, it would do nothing — the radio is shared by all processes on the machine, so adding cores doesn't increase the PPS the radio can deliver. Plug in an Ethernet cable first, *then* think about multiple processes. Always identify the binding constraint before deploying more cores.
+
+
+I have a very smart friend who works for a HFT firm back in India. His job literally involves shaving off picoseconds whereas I'm trying to save on milliseconds. Maybe I can ask him for some tips on what else I can do here.
 
 ## Conclusion
 
-What I set out to build was an API my friend could hit from his laptop. What I actually built was a ~250-QPS odd-or-even oracle on a Pi in my closet, plus a stress-test harness, plus a non-trivial appreciation for how much of the modern internet's complexity exists because the simple version doesn't scale.
+What I set out to build was an API my friend could hit from his laptop. What I actually built was a ~210-QPS odd-or-even oracle on a Pi in my closet and a deep non-trivial appreciation for how much of the modern internet's complexity exists.
 
-[TBA] Add stuff about Jatin Garg and some ideas to improve latency.
+The four servers map cleanly to four discrete architectural steps, and each one bought a different kind of improvement:
 
-![](../../assets/cwp.jpeg)
-Behold the Chaithanya's Web Platform in it's full glory.
+| # | Server | Source | Sustainable QPS (100% success) | Knee QPS (~50% success) | Total OK / 23,500 | p50 @ 10 QPS |
+|---|---|---|---|---|---|---|
+| 1 | `single_thread` (backlog = 1) | [`1_single_thread.cpp`](https://github.com/Dragonado/IPServer/blob/main/1_single_thread.cpp) | 10 | ~10 | 155 (0.7%) | 92 ms |
+| 2 | `single_thread_max_queue` (backlog = 4096) | [`2_single_thread_max_queue.cpp`](https://github.com/Dragonado/IPServer/blob/main/2_single_thread_max_queue.cpp) | 160 | ~210 | 5,675 (24.1%) | 58 ms |
+| 3 | `epoll_blocking_io` | [`3_epoll_single_blocking_io.cpp`](https://github.com/Dragonado/IPServer/blob/main/3_epoll_single_blocking_io.cpp) | 160 | ~210 | 6,601 (28.1%) | 86 ms |
+| 4 | `epoll_non_blocking_io` | [`4_epoll_single_non_blocking_io.cpp`](https://github.com/Dragonado/IPServer/blob/main/4_epoll_single_non_blocking_io.cpp) | 210 | ~260 | 11,408 (48.5%) | 53 ms |
 
-[TBA Claude] Add a table for comparison of 4 different experiemnts, and their codes.
+The single biggest win was changing one integer (`listen(s, 1)` → `listen(s, 4096)`). epoll without non-blocking I/O was a wash. The full state-machine refactor added another ~25%, at which point the Wi-Fi link itself became the bottleneck and no server change would help further.
+
+
+![Chaithanya's Web Platform: the Pi 5, the cooler, the SD card — fully decked-out](../../assets/cwp.jpeg)
+
+Behold Chaithanya's Web Platform in its full glory.
 
 ## Interesting questions I encountered
 
 Here are some random questions that I asked myself that I found quite interesting:
 
-- What is stopping a device from lying and saying that its "raspberrypi.local" during a mDNS protocol? How can this DNS resolution be verified?
-- If know the laptop password of my friend then I can I just ssh into his machine if we are on the same wifi?
-- My MacBook and my pi are in the same room. Why do they need a wifi access point to communicate with each other? Can we replicate this server logic on bluetooth?
-- What is the difference between router and access point? My ISP gave me one box. Also will my server still work if I remove the ISP cable in my router?
-- Why does someone outside my Wi-Fi network see only encrypted traffic, but someone inside my Wi-Fi can read my TCP server's plaintext bytes? Also why is SSH secure against both?
-- If `recv()` and `send()` are POSIX-standardized, why isn't `epoll`? Why do BSD/macOS and Linux have completely different APIs (`kqueue` vs `epoll`) for the same fundamental job? This is important since I'm coding on two different kernels here. Linux kernel for my Pi and Unix for my MacBook.
+- What stops a device on my network from lying and claiming to be `raspberrypi.local` during the mDNS protocol? How can this DNS resolution be verified?
+- If I know my friend's laptop password, can I just SSH into his machine when we're on the same Wi-Fi?
+- My MacBook and my Pi are in the same room. Why do they need a Wi-Fi access point to communicate with each other? Could we replicate this server logic over Bluetooth?
+- What's the difference between a router and an access point? My ISP gave me one box that seems to do both. Would my server still work if I unplugged the ISP cable from the router?
+- Why does someone outside my Wi-Fi network see only encrypted traffic, but someone inside my Wi-Fi can read my TCP server's plaintext bytes? And why is SSH secure against both?
+- If `recv()` and `send()` are POSIX-standardised, why isn't `epoll`? Why do BSD/macOS and Linux have completely different APIs (`kqueue` vs `epoll`) for the same fundamental job? This matters here because I'm coding on two different kernels: Linux on the Pi, Darwin/BSD on the MacBook.
 
 ## Next learnings
 
@@ -548,7 +639,7 @@ A few things I want to dig deeper into next:
 - The full 7-layer OSI model — I now understand L2 (Ethernet, Wi-Fi MAC), L3 (IP), and L4 (TCP) reasonably well, but L5–L7 (TLS, session management, application protocols) are still hand-wavy in my head.
 - How file descriptors actually work in the kernel — the `task_struct` → `files_struct` → `fdtable` chain, why `fork()` shares fds, how `select`/`poll`/`epoll` interact with the wait queues on each socket.
 - The TLS handshake and how certificates actually chain back to a root of trust.
-- WPA2/WPA3 internals — the 4-way handshake, the pairwise transient key, and why "having the Wi-Fi password" is enough to MITM your neighbors' traffic.
+- WPA2/WPA3 internals — the 4-way handshake, the pairwise transient key, and why "having the Wi-Fi password" is enough to MITM your neighbours' traffic.
 - BGP and how the public internet routes between autonomous systems.
 - How CDNs and load balancers actually work under the hood — DNS-based vs Anycast, layer-4 vs layer-7, consistent hashing for cache locality.
 - `SO_REUSEPORT` and multi-process servers (the natural next experiment, once I have an Ethernet cable).
