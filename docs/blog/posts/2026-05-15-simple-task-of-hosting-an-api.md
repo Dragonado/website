@@ -500,92 +500,7 @@ At the very bottom of the staircase, this server's p50 at 10 QPS is **53 ms** �
 
 #### Bottleneck is Wi-Fi 
 
-[TBA: needs to be fact checked]
-
-Once the server architecture itself is no longer the bottleneck, the Wi-Fi link is. Two back-of-the-envelope calculations confirm this, and they're worth working through.
-
-!!! note "Throughput math: why the ceiling is ~250 QPS"
-    Each request lifecycle takes about **8 frames** on the wire — SYN, SYN-ACK, ACK, the request data, the response data, FIN, FIN-ACK, final ACK.
-
-    At 802.11 small-packet airtime of roughly 360 µs per frame (DIFS ≈ 28 µs + average backoff ≈ 135 µs + PHY preamble + payload + SIFS + ACK), the theoretical Wi-Fi small-packet PPS ceiling is:
-
-    `1 / 360 µs ≈ 2,780 PPS`
-
-    Real-world degradation from interference, retransmits, and neighbour BSS traffic drops sustained PPS to ~1,500–2,500. Divide by 8 frames per request:
-
-    `1,500 PPS / 8 ≈ 190 QPS`  
-    `2,500 PPS / 8 ≈ 310 QPS`
-
-    Our measured ceiling sits between ~210 (sustained 100%) and ~260 (knee). Right in the middle of that range.
-
-!!! note "Latency math: why p50 floors at ~50 ms"
-    Each request needs **3 sequential round-trips**:
-`the answer is unintuitive: the server is barely doing any work at all.
-
-!!! note "Throughput math: why the ceiling is ~250 QPS"
-    Each request lifecycle takes about **8 frames** on the wire — SYN, SYN-ACK, ACK, the request data, the response data, FIN, FIN-ACK, final ACK.
-
-    At 802.11 small-packet airtime of roughly 360 µs per frame (DIFS ≈ 28 µs + average backoff ≈ 135 µs + PHY preamble + payload + SIFS + ACK), the theoretical Wi-Fi small-packet PPS ceiling is:
-
-    `1 / 360 µs ≈ 2,780 PPS`
-
-    Real-world degradation from interference, retransmits, and neighbour BSS traffic drops sustained PPS to ~1,500–2,500. Divide by 8 frames per request:
-
-    `1,500 PPS / 8 ≈ 190 QPS`  
-    `2,500 PPS / 8 ≈ 310 QPS`
-
-    Our measured ceiling sits between ~210 (sustained 100%) and ~260 (knee). Right in the middle of that range.
-
-!!! note "Latency math: why p50 floors at ~50 ms"
-    Each request needs **3 sequential round-trips**:
-`the answer is unintuitive: the server is barely doing any work at all.
-
-!!! note "Throughput math: why the ceiling is ~250 QPS"
-    Each request lifecycle takes about **8 frames** on the wire — SYN, SYN-ACK, ACK, the request data, the response data, FIN, FIN-ACK, final ACK.
-
-    At 802.11 small-packet airtime of roughly 360 µs per frame (DIFS ≈ 28 µs + average backoff ≈ 135 µs + PHY preamble + payload + SIFS + ACK), the theoretical Wi-Fi small-packet PPS ceiling is:
-
-    `1 / 360 µs ≈ 2,780 PPS`
-
-    Real-world degradation from interference, retransmits, and neighbour BSS traffic drops sustained PPS to ~1,500–2,500. Divide by 8 frames per request:
-
-    `1,500 PPS / 8 ≈ 190 QPS`  
-    `2,500 PPS / 8 ≈ 310 QPS`
-
-    Our measured ceiling sits between ~210 (sustained 100%) and ~260 (knee). Right in the middle of that range.
-
-!!! note "Latency math: why p50 floors at ~50 ms"
-    Each request needs **3 sequential round-trips**:
-`the answer is unintuitive: the server is barely doing any work at all.
-
-!!! note "Throughput math: why the ceiling is ~250 QPS"
-    Each request lifecycle takes about **8 frames** on the wire — SYN, SYN-ACK, ACK, the request data, the response data, FIN, FIN-ACK, final ACK.
-
-    At 802.11 small-packet airtime of roughly 360 µs per frame (DIFS ≈ 28 µs + average backoff ≈ 135 µs + PHY preamble + payload + SIFS + ACK), the theoretical Wi-Fi small-packet PPS ceiling is:
-
-    `1 / 360 µs ≈ 2,780 PPS`
-
-    Real-world degradation from interference, retransmits, and neighbour BSS traffic drops sustained PPS to ~1,500–2,500. Divide by 8 frames per request:
-
-    `1,500 PPS / 8 ≈ 190 QPS`  
-    `2,500 PPS / 8 ≈ 310 QPS`
-
-    Our measured ceiling sits between ~210 (sustained 100%) and ~260 (knee). Right in the middle of that range.
-
-!!! note "Latency math: why p50 floors at ~50 ms"
-    Each request needs **3 sequential round-trips**:
-```
-    1. Handshake: SYN → SYN-ACK → ACK
-    2. Request → response
-    3. Teardown: FIN → FIN-ACK → final ACK
-
-    Measured RTT on this network (via `ping`) is ~12–28 ms; call it ~18 ms typical. Three RTTs:
-
-    `3 × 18 ms = 54 ms minimum`
-
-    Server 4's measured p50 at 10 QPS is **53 ms** — within 2% of the theoretical floor. The server is doing essentially no observable work; the 53 ms is entirely Wi-Fi airtime.
-
-So our throughput is Wi-Fi-PPS-bound, and our latency is Wi-Fi-RTT-bound. A faster server architecture cannot improve either number on this network. The bottleneck has migrated out of our code entirely.
+[TBA: I suspect we are optimal in code but limited by the technology of our hardware.=]
 
 ## Latency optimisations
 
@@ -635,20 +550,6 @@ Here are some random questions that I asked myself that I found quite interestin
 - Why does someone outside my Wi-Fi network see only encrypted traffic, but someone inside my Wi-Fi can read my TCP server's plaintext bytes? And why is SSH secure against both?
 - If `recv()` and `send()` are POSIX-standardised, why isn't `epoll`? Why do BSD/macOS and Linux have completely different APIs (`kqueue` vs `epoll`) for the same fundamental job? This matters here because I'm coding on two different kernels: Linux on the Pi, Darwin/BSD on the MacBook.
 
-## Next learnings
-
-A few things I want to dig deeper into next:
-
-- The full 7-layer OSI model — I now understand L2 (Ethernet, Wi-Fi MAC), L3 (IP), and L4 (TCP) reasonably well, but L5–L7 (TLS, session management, application protocols) are still hand-wavy in my head.
-- How file descriptors actually work in the kernel — the `task_struct` → `files_struct` → `fdtable` chain, why `fork()` shares fds, how `select`/`poll`/`epoll` interact with the wait queues on each socket.
-- The TLS handshake and how certificates actually chain back to a root of trust.
-- WPA2/WPA3 internals — the 4-way handshake, the pairwise transient key, and why "having the Wi-Fi password" is enough to MITM your neighbours' traffic.
-- BGP and how the public internet routes between autonomous systems.
-- How CDNs and load balancers actually work under the hood — DNS-based vs Anycast, layer-4 vs layer-7, consistent hashing for cache locality.
-- `SO_REUSEPORT` and multi-process servers (the natural next experiment, once I have an Ethernet cable).
-- `io_uring`, the modern Linux replacement for `epoll` — completion-based instead of readiness-based, much less syscall overhead at very high QPS.
-
-If you've made it this far, thanks for reading. The whole thing — server, stress harness, charts, scratch files — is on GitHub at https://github.com/Dragonado/IPServer.
 
 ## References
 
