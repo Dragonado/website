@@ -15,7 +15,7 @@ I played it off cool and said "Nah bro, I don't have a server right now" to whic
 
 This was the end of the conversation but it stuck with me for quite a while. As a grad student at Georgia Tech in CS, I should not be stumped by this simple question, so I decided to learn a little about networks and write this blog on "**the simple task of hosting an API**".
 
-Also, my friend is joining Jane Street. So maybe it is a casual question to ask for someone like him ¯\\\_(ツ)\_/¯
+Also, my friend is joining a top tier trading firm in NYC. So maybe it is a casual question to ask for someone like him ¯\\\_(ツ)\_/¯
 
 
 ## Background
