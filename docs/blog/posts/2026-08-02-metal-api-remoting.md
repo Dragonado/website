@@ -13,7 +13,7 @@ I was very curious as to how they could possibly offer such low GPU prices with 
 
 1. on-demand
 2. sole-tenancy 
-3. No eviction [GPT: get me the correct prhase for this]
+3. No forced preemption
 
 Surely these must be VC subsidised GPU and hence bleeding money right? But no, I don't think so. 
 
@@ -25,17 +25,17 @@ What does what mean? Basically, you sell a piece of something to a user. Then yo
 
 All jokes aside, oversubscription is a pretty common thing. It is literally how banks work, they lend out more money than they actually have. But in a more relevant example, cloud providers also do this.
 
-For example, if you pay for 100GB disk space on your serverless function and you use only 20GB of it, you probably automatically get downsized and your hardware is oversubscribed to other users. Cloud provider makes a huge saving (which in turn reduces prices) but you still own the right to use your entire 100GB disk space. You're just dumb for not keeping your utlization % high. As one of my close friends used to say, "Users are losers". Now what happens if every single user decided to utlize 100% of their.
+For example, if you pay for 100GB disk space on your serverless function and you use only 20GB of it, you probably automatically get downsized and your hardware is oversubscribed to other users. Cloud provider makes a huge saving (which in turn reduces prices) but you still own the right to use your entire 100GB disk space. You're just dumb for not keeping your utlization % high. As one of my close friends used to say, "Users are losers".
 
 What if happens if every single user decides to utilize 100% of their resources? Idk man what happens if everyone withdrew all their money from the bank? Civilization collapses or sumthing. Just have faith in the [LLN gods](https://en.wikipedia.org/wiki/Law_of_large_numbers) (not a typo) and pray this doesn't happen.
 
-So, I was very interested how ThunderCompute (will call them TNR going forward), manages to oversubscribe their GPU. The way they do it so simple yet so smart. For most ML workfloads, the GPU is idle a lot of the time. What if you could run that GPU on a different ML workload that someone else is waiting on? That would be nice but we can't do that since the GPU is literally attached to the CPU that the first user is doing. Oh, but then what if we detach the GPU and make it remote? That way could schedule the GPU jobs from different users and schedule them as we want. Perhaps connect the CPU and GPU via a internet protocol? Yeah let's do this and call it GPU-over-TCP :absolute-cinema:
+So, I was very interested how ThuNdeRcompute (TNR), manages to oversubscribe their GPU. The way they do it so simple yet so smart. For most ML workfloads, the GPU is idle a lot of the time. What if you could run that GPU on a different ML workload that someone else is waiting on? That would be nice but we can't do that since the GPU is literally attached to the CPU that the first user is doing. Oh, but then what if we detach the GPU and make it remote? That way could schedule the GPU jobs from different users and schedule them as we want. Perhaps connect the CPU and GPU via a internet protocol? Yeah let's do this and call it GPU-over-TCP :absolute-cinema:
 
 Yeah so basically, they intercept your code's GPU CUDA calls, forward them over the internet via TCP to a real GPU, compute it there, give back the result via TCP again. Sounds simple but insanely hard to achieve. But once you are able to do it, you can oversubscribe your GPUs and make compute cheap and everyone wins!
 
 Their only downsides:
 
-1. Network latency/throughput: Obviously a PCIe bus is faster and has more throughput that TCP. We're talking (100 ns, 64 GB/s) vs (100 \micro seconds, 20 GB/s) [CHAT: fact check this plz]. 
+1. Network latency/throughput: Obviously a PCIe bus is faster and has more throughput than TCP.
 2. GPU availability: Because they own substantially less hardware than most cloud providers, I could never find a popular GPU like H100 available.
 
 Fascinated by all this, I decided to make my own GPU-over-TCP but since I'm constrained to a 5-year old Macbook M1 air with a single GPU, I have to make several changes than what TNR does.
