@@ -48,7 +48,7 @@ Useful primary source:
 
 ## Publishing and presentation
 
-- **Draft markers are visible in the published page.** Both `[CHAT: ...]` callouts and `TODO: Rest of blog.` currently render.
+- **A draft marker is visible in the published page.** `TODO: Rest of blog.` currently renders. The two `[CHAT: ...]` callouts have been replaced with concrete examples.
 - **The article ends abruptly while the remaining outline is commented out.** Because the post is published, readers encounter the TODO and then a short limitations section rather than a deliberate stopping point.
 - **The rendering limitation mixes mandatory and conditional problems.** A remote renderer must handle client-owned drawables, presentation timing, and frame transport. Image compression is a design choice, and audio synchronization matters only when the remoted application also has audio.
 - **The student-credit price conversion is time-sensitive.** The "$20 equals about nine H100 hours" example should either state the observed date/rate or be rechecked before final publication.
@@ -61,3 +61,4 @@ Useful primary source:
 - Softened the claim that nobody else has built anything similar, although the remaining "first" wording still needs qualification.
 - Reworded the gRPC bullet so it no longer claims that the project has transport security merely because it uses gRPC.
 - Confirmed from Thunder's own current job posting that its CUDA interception uses a userspace `LD_PRELOAD` shim.
+- Replaced both visible `[CHAT: ...]` requests with CUDA/Metal interception and memory-transfer examples.

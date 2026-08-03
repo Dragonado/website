@@ -76,9 +76,11 @@ However there are at least two reasons why no one has done this and why my proje
 1. Apple Metal has no easy interception point for each API call.
 2. Apple's Unified Memory architecture allows shared-memory writes that are invisible to the shim.
 
-### Code interception
+### 1. Code interception
 
 We have to intercept the client code at some point and forward their GPU calls to the network. This is where TNR and my project differs.
+
+#### The problem
 
 TNR does this at the dynamic link layer. 
 
@@ -88,13 +90,42 @@ Unfortunately, I cannot do this becauase Apple don't have documentation for this
 
 It would be extremely laborous and fragile to intercept objective-C calls that are resolved at runtime.
 
-[CHAT: give example of simple ABIs for Cuda and metal]
+Here is the concrete difference. A CUDA Driver API call looks like this:
+
+```cpp
+CUdeviceptr buffer;
+cuMemAlloc(&buffer, size);
+```
+
+`cuMemAlloc` is a C function exported by the CUDA driver library. The compiled program contains a reference to that named function, and the dynamic loader decides which implementation the reference points to. An `LD_PRELOAD` shim can export its own function with the same name and signature:
+
+```cpp
+CUresult cuMemAlloc(CUdeviceptr *buffer, size_t size) {
+    return send_malloc_to_remote_gpu(buffer, size);
+}
+```
+
+Now the application calls the shim without needing to be recompiled. In fact, [Thunder says this is exactly the broad mechanism it uses](https://www.thundercompute.com/careers/role?id=2efae53b-817c-43e7-9da3-72694813f608): a userspace shim loaded through `LD_PRELOAD` intercepts CUDA calls and sends them over gRPC.
+
+A typical `metal-cpp` object call instead looks like this:
+
+```cpp
+void *data = buffer->contents();
+```
+
+The `contents()` wrapper is inline and eventually sends an Objective-C message using the object and a selector. At the dynamic-link layer, many different Objective-C methods pass through the same generic message-dispatch machinery. There is no separate `MTLBuffer_contents` function symbol that I can simply replace. Intercepting the generic Objective-C dispatcher would also catch messages from the rest of the process, not just Metal. 
+
+#### The fix
+
+That is why I substitute my own `MTL` namespace while compiling the client instead.
 
 ### Unified Memory
 
 In Nvidia GPUs, there is a clear divide between CPU and GPU. In fact, GPUs have their own RAM/cache/memory and stuff. The way the CPU sends data to the GPU is via the PCI Express bus that is actually very fast with high throughput.
 
 This express bus is invoked by the `cudaMemcpy` function that you usually see in CUDA programs which loads and unloads data from GPU.
+
+#### The problem
 
 The consequence of this is that the programmer conceptually writes their program thinking that CPU and GPU are different entities that need to share data. TNR takes advantage of this model and literally the only difference is that instead of the PCIe, the data travels via TCP instead.
 
@@ -106,17 +137,39 @@ The programmer would then assume that CPU/GPU is the same and would expect every
 
 This causes a lot of issues and in some cases even the correctness of it cannot be resolved.
 
-[CHAT: Give a simple example of cuda and metal difference]
+Here is the simplest example. A conventional discrete-GPU CUDA program explicitly announces when bytes move:
 
+```cpp
+cudaMalloc(&gpu_buffer, size);
+cudaMemcpy(gpu_buffer, cpu_buffer, size, cudaMemcpyHostToDevice);
+kernel<<<grid, block>>>(gpu_buffer);
+cudaMemcpy(cpu_buffer, gpu_buffer, size, cudaMemcpyDeviceToHost);
+```
 
-TODO: Rest of blog.
+A remoter sees both `cudaMemcpy` calls. Each call tells it which bytes moved, how many bytes moved, and the direction they moved in.
 
-## What this project does—and does not—claim
+With a shared Metal buffer, the CPU can write through a normal pointer:
+
+```cpp
+MTL::Buffer *buffer = device->newBuffer(size, MTL::ResourceStorageModeShared);
+float *data = static_cast<float *>(buffer->contents());
+data[0] = 42.0f;
+```
+
+That last line is just a CPU memory write. It does not call Metal, so my shim receives no notification that `data[0]` changed. Native Metal does not need one because the CPU and GPU can access the same shared allocation. 
+
+#### The fix
+
+My client and server do not actually share memory, so I compensate by keeping a shadow buffer on the client, copying its bytes to the server at `commit()`, and copying results back after `waitUntilCompleted()`. That supports the write-commit-wait-read pattern used by my demo, but it does not automatically reproduce every asynchronous shared-memory access pattern that native Metal permits.
+
+## What this project does and does not do
 
 What this project does not:
 
 - 100% API coverage: For this Proof of Concept I could only write code that covers a small subset of Metal-cpp API methods.
 - Render: There is no rendering here whatsoever. That is much harder than compute because we have to take into consideration the window owned by the mac, frame rate, image compression, audio sync, and so many more harder problems.
+
+TODO: Rest of blog.
 
 <!-- lorem ipsum -->
 
