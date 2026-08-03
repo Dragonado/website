@@ -22,6 +22,8 @@ Surely these must be VC subsidised GPU and hence bleeding money right? But no, I
 
 The simple answer is: Oversubscription :stars:
 
+Fascinated by all this, I decided to make my own GPU-over-TCP but since I'm constrained to my dusty 6-year old Macbook air with M1 chip with a single GPU, I have to make several changes to what TNR does.
+
 ## Oversubscription
 
 What does what mean? Basically, you sell an item to a user. Then, when the first user is not using the item, you sell the same item to a different user. With this secret technique, you have essentially reduced costs while also increasing revenue.
@@ -40,8 +42,6 @@ The obvious downsides are:
 
 -  _Network latency & throughput_: Moving data from CPU to GPU via PCIe bus is faster and has more throughput than TCP.
 -  Not suitable for _all_ workloads: TNR makes a profit by identifying GPU idleness and exploiting it. However, if your workload has the GPU running all the time (for example calculating hashes for a certain reason :hint-hint:) then it's not a particularly useful load for the company.
-
-Fascinated by all this, I decided to make my own GPU-over-TCP but since I'm constrained to my dusty 6-year old Macbook air with M1 chip with a single GPU, I have to make several changes to what TNR does.
 
 Btw they also have a student program where you get a free $20 in GPU credits (~9hrs of a H100).
 
@@ -62,7 +62,7 @@ It'll make more sense when you read the next sections but here is the architectu
 
 ### Ominous Premonition
 
-This seems like a nice idea. Just copy what TNR does but do it for metal-cpp. No one else in the world seems to have done anything like this. Exciting!
+On first glance, the project seems like a nice idea. Just copy what TNR does but do it for metal-cpp. No one else in the world seems to have done anything like this. Exciting!
 
 However there are atleast two reasons why no one has done this and why my project is a much much harder to solve than TNR:
 
