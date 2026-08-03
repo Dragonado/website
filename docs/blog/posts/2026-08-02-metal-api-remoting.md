@@ -34,7 +34,7 @@ For example, if you pay for 100GB disk space on your serverless function and you
 
 What if happens if every single user decides to utilize 100% of their resources? Idk man what happens if everyone withdrew all their money from the bank? Civilization collapses or sumthing. Just have faith in the [LLN gods](https://en.wikipedia.org/wiki/Law_of_large_numbers) (not a typo) and pray this doesn't happen.
 
-I was very interested how ThuNdeRcompute (TNR) manages to oversubscribe their GPU. The way they do it so simple yet so smart. For most ML workfloads, the GPU is idle a lot of the time. What if you could run that GPU on a different ML workload that someone else is waiting on? That would be nice but we can't do that since the GPU is literally attached to the CPU that the first user is doing. Oh, but then what if we detach the GPU and make it remote? That way could pool GPU jobs from different users and schedule them as we want. Perhaps connect the CPU and GPU via a internet protocol? Yeah let's do this and call it GPU-over-TCP :absolute-cinema:
+I was very interested how ThuNdeRcompute (TNR) manages to oversubscribe their GPU. The way they do it so simple yet so smart. For most ML workloads, the GPU is idle a lot of the time. What if you could run that GPU on a different ML workload that someone else is waiting on? That would be nice but we can't do that since the GPU is literally attached to the CPU that the first user is doing. Oh, but then what if we detach the GPU and make it remote? That way could pool GPU jobs from different users and schedule them as we want. Perhaps connect the CPU and GPU via an internet protocol? Yeah let's do this and call it GPU-over-TCP :absolute-cinema:
 
 Yeah so basically, they intercept your code's GPU CUDA calls, forward them over the internet via TCP to a real GPU, compute it there, give back the result via TCP again. Sounds simple but insanely hard to achieve. But once you are able to do it, you can oversubscribe your GPUs and make compute cheap and everyone wins!
 
@@ -45,7 +45,7 @@ The obvious downsides are:
 
 Btw they also have a student program where you get a free $20 in GPU credits (~9hrs of a H100).
 
-## Hardware & Setup
+## Hardware & Software Setup
 
 My hardware: 
 
@@ -53,27 +53,52 @@ My hardware:
 
 You might be wondering where the other hardware is located? After all I have to pass data from one device to the other over the network.
 
-Yeah, I cant be bothered to rent out at a cloud apple GPU instance and go through the hassle of setting up the networking for it. I'm just gonna forward the network calls to localhost and have my own device intercept and run its own code lol.
+Yeah, I can't be bothered to rent out at a cloud apple GPU instance and go through the hassle of setting up the networking for it. I'm just gonna forward the network calls to localhost and have my own device intercept and run its own code lol.
 
 It'll make more sense when you read the next sections but here is the architecture setup:
 
 ![Metal API Remoter architecture: client code uses a compile-time shim that sends calls over the network to a server with the GPU](../../assets/metal-api-remoter-architecture.jpg)
 
+The software setup:
 
-### Ominous Premonition
+- C++: This is my favorite language.
+- [metal-cpp](https://developer.apple.com/metal/cpp/): The only way to talk to my GPU in C++.
+- [gRPC](https://grpc.io) for networking: Every time I have to pass data via the network, I thank Google for creating gRPC. They abstract away so many things like security, multithreading, retries, data encoding/decoding and its obviously designed to scale.
+- Shim header: This is 50% of the project that silently adds a piece code to the user's code that will hijack all their metal calls and convert them to network calls.
+- Server code: This is the other 50% of the project that receives GPU requests via the network and is supposed to schedule, compute and return the result.
+
+## Ominous Premonition
 
 On first glance, the project seems like a nice idea. Just copy what TNR does but do it for metal-cpp. No one else in the world seems to have done anything like this. Exciting!
 
-However there are atleast two reasons why no one has done this and why my project is a much much harder to solve than TNR:
+However there are at least two reasons why no one has done this and why my project is a much much harder to solve than TNR:
 
-1. Lack of ABI interception of the metal framework.
-2. Apple's Unified Memory architecture.
+1. Apple Metal has no easy interception point for each API call.
+2. Apple's Unified Memory architecture allows shared-memory writes that are invisible to the shim.
 
-<!-- ### The basic client/server goal -->
+### Code interception
+
+We have to intercept the client code at some point and forward their GPU calls to the network. This is where TNR and my project differs.
+
+TNR does this at the dynamic link layer. 
+
+They catch the symbols, that are generated after compilation, that calls the GPU and replace it with their. They can do this because CUDA literally publishes documentation about their [ABI table in their website](https://docs.nvidia.com/cuda/ptx-writers-guide-to-interoperability/index.html).
+
+
+TODO: Rest of blog.
+
+## What this project does—and does not—claim
+
+What this project does not:
+
+- 100% API coverage: For this Proof of Concept I could only write code that covers a small subset of Metal-cpp API methods.
+- Render: There is no rendering here whatsoever. That is much harder than compute because we have to take into consideration the window owned by the mac, frame rate, image compression, audio sync, and so many more harder problems.
 
 <!-- lorem ipsum -->
 
-<!-- ### What this project does—and does not—claim -->
+<!-- ### The basic client/server goal -->
+
+
 
 <!-- lorem ipsum -->
 
