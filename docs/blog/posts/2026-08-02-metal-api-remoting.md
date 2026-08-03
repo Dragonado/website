@@ -1,17 +1,16 @@
 ---
 date: 2026-08-02
-draft: true
 ---
 
 # Remoting Metal: turning Apple’s local GPU API into a network protocol
 
-## Lore
+## Motivation
 
-I've said this before and I'll say it again. Compared to my experience in corporate, Grad school is a very interesting place to be in. You meet people from many walks of life and people who will transition to all other walks of life. You get a glimpse into an area that you would never have had the oppurtunity to know about as compared to a static workplace. 
+I've said this before and I'll say it again. Compared to my experience in corporate, Grad school is a very interesting place to be in. You meet people from many walks of life and people who will transition to all other walks of life. You get a glimpse into an area that you would never have had the opportunity to know about as compared to a static workplace. 
 
 <!-- more -->
 
-Anyways, One of my friends introduced me to a very interesting statup from Georgia Tech (#GoJackets! :bee:) called [ThunderCompute](www.thundercompute.com). They are riding the AI wave and are selling cheap GPU compute. Possibly the cheapest I have ever found so far (?!). The closest I have seen are spot instances given by AWS/GCP/Azure but those are quite risky to run ML workloads since they can be terminated at the providers will. 
+Anyways, One of my friends introduced me to a very interesting startup from Georgia Tech (#GoJackets! :bee:) called [ThunderCompute](https://www.thundercompute.com). They are riding the AI wave and are selling cheap GPU compute. Possibly the cheapest I have ever found so far (?!). The closest I have seen are spot instances given by AWS/GCP/Azure but those are quite risky to run ML workloads since they can be terminated at the providers will. 
 
 I was very curious as to how they could possibly offer such low GPU prices with these features:
 
@@ -25,11 +24,11 @@ The simple answer is: Oversubscription :stars:
 
 ## Oversubscription
 
-What does what mean? Basically, you sell an item to a user. Then, when the first user is not using the item, you sell the same item to a different user. With this secret technique, you have essentially reduced costs while also increasing revenue. If you can pull this off then you can arbitrage this to infinity and become a trillionaire.
+What does what mean? Basically, you sell an item to a user. Then, when the first user is not using the item, you sell the same item to a different user. With this secret technique, you have essentially reduced costs while also increasing revenue.
 
-All jokes aside, oversubscription is a pretty common thing. It is literally how banks work, they lend out more money than they actually have. But in a more relevant example, cloud providers also do this.
+Oversubscription is actually a pretty common thing. It is literally how banks work, they lend out more money than they actually have. But in a more relevant example, cloud providers also do this.
 
-For example, if you pay for 100GB disk space on your serverless function and you use only 20GB of it, you probably automatically get downsized and your hardware is oversubscribed to other users. Cloud provider makes a huge saving (which in turn reduces prices) but you still own the right to use your entire 100GB disk space. You're just dumb for not keeping your utlization % high. As one of my close friends used to say, "Users are losers".
+For example, if you pay for 100GB disk space on your serverless function and you use only 20GB of it, your allocated hardware is maybe oversubscribed to other users. Cloud provider makes a huge saving (which in turn reduces prices) but you still own the right to use your entire 100GB disk space. You gotta be smart enough to keep your utilization % high.
 
 What if happens if every single user decides to utilize 100% of their resources? Idk man what happens if everyone withdrew all their money from the bank? Civilization collapses or sumthing. Just have faith in the [LLN gods](https://en.wikipedia.org/wiki/Law_of_large_numbers) (not a typo) and pray this doesn't happen.
 
@@ -38,258 +37,266 @@ I was very interested how ThuNdeRcompute (TNR) manages to oversubscribe their GP
 Yeah so basically, they intercept your code's GPU CUDA calls, forward them over the internet via TCP to a real GPU, compute it there, give back the result via TCP again. Sounds simple but insanely hard to achieve. But once you are able to do it, you can oversubscribe your GPUs and make compute cheap and everyone wins!
 
 The obvious downsides are:
--  _Network latency & throughput_: Moving data from CPU to GPU via PCIe bus is faster and has more throughput than TCP.
--  Not suitable for all workloads: TNR makes a profit by identifying GPU idleness and exploiting it. However, if your workload has the GPU running all the time (for example calculating hashes for a certain reason :hint-hint:) then it's not a particularly useful load for the company.
 
-Fascinated by all this, I decided to make my own GPU-over-TCP but since I'm constrained to my dusty 5-year old Macbook air with M1 chip with a single GPU, I have to make several changes to what TNR does.
+-  _Network latency & throughput_: Moving data from CPU to GPU via PCIe bus is faster and has more throughput than TCP.
+-  Not suitable for _all_ workloads: TNR makes a profit by identifying GPU idleness and exploiting it. However, if your workload has the GPU running all the time (for example calculating hashes for a certain reason :hint-hint:) then it's not a particularly useful load for the company.
+
+Fascinated by all this, I decided to make my own GPU-over-TCP but since I'm constrained to my dusty 6-year old Macbook air with M1 chip with a single GPU, I have to make several changes to what TNR does.
 
 Btw they also have a student program where you get a free $20 in GPU credits (~9hrs of a H100).
 
-## The motivation: I wanted a remote Metal GPU
+## Hardware & Setup
 
-Some terminology:
+My hardware: 
 
-- Objective-C: A general purpose language that, as far as I know, is primarly used by Apple.
-- Metal-cpp: A low-overhead C++ interface for Metal that converts your C++ code to Objective-C code. 
-- Metal: The framework developed by Apple used to talk to the GPU in your Mac. 
-- API: An abstract term for a contract in which a person guarantees to return a specifc value for a specific input.
-- Remoting: An abstract term for a system that lets an application run code in another computer.
+![The M1 MacBook Air used to build and test the Metal API Remoter](../../assets/metal-api-remoter-m1-macbook-air.jpg)
 
-Combine the last 3 terms to get Metal-API-Remoting and we get the title of the blog and the project that I want to do.
+You might be wondering where the other hardware is located? After all I have to pass data from one device to the other over the network.
 
-There are two reasons why this project was doomed to fail:
+Yeah, I cant be bothered to rent out at a cloud apple GPU instance and go through the hassle of setting up the networking for it. I'm just gonna forward the network calls to localhost and have my own device intercept and run its own code lol.
+
+It'll make more sense when you read the next sections but here is the architecture setup:
+
+![Metal API Remoter architecture: client code uses a compile-time shim that sends calls over the network to a server with the GPU](../../assets/metal-api-remoter-architecture.jpg)
+
+
+### Ominous Premonition
+
+This seems like a nice idea. Just copy what TNR does but do it for metal-cpp. No one else in the world seems to have done anything like this. Exciting!
+
+However there are atleast two reasons why no one has done this and why my project is a much much harder to solve than TNR:
 
 1. Lack of ABI interception of the metal framework.
 2. Apple's Unified Memory architecture.
 
-### The basic client/server goal
+<!-- ### The basic client/server goal -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### What this project does—and does not—claim
+<!-- ### What this project does—and does not—claim -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-## 2. Why Metal is harder to intercept than CUDA
+<!-- ## 2. Why Metal is harder to intercept than CUDA -->
 
-### CUDA's C ABI and dynamic-linker boundary
+<!-- ### CUDA's C ABI and dynamic-linker boundary -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Metal's Objective-C message dispatch
+<!-- ### Metal's Objective-C message dispatch -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Why precompiled Metal binaries are outside the MVP
+<!-- ### Why precompiled Metal binaries are outside the MVP -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-## 3. The compile-time `metal-cpp` header shim
+<!-- ## 3. The compile-time `metal-cpp` header shim -->
 
-### Turning `MTL::` into `MetalShim::`
+<!-- ### Turning `MTL::` into `MetalShim::` -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### What the compiler emits after substitution
+<!-- ### What the compiler emits after substitution -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Source compatibility versus binary transparency
+<!-- ### Source compatibility versus binary transparency -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-## 4. Turning Metal's object graph into remote handles
+<!-- ## 4. Turning Metal's object graph into remote handles -->
 
-### Devices, queues, libraries, functions, and pipelines
+<!-- ### Devices, queues, libraries, functions, and pipelines -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Why object creation is synchronous RPC
+<!-- ### Why object creation is synchronous RPC -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### `NS::String*` is data, not a remote GPU object
+<!-- ### `NS::String*` is data, not a remote GPU object -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-## 5. Create, record, commit, and wait
+<!-- ## 5. Create, record, commit, and wait -->
 
-### Creation calls cross the network
+<!-- ### Creation calls cross the network -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Recording calls stay local
+<!-- ### Recording calls stay local -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### `commit()` is the serialization boundary
+<!-- ### `commit()` is the serialization boundary -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### `waitUntilCompleted()` is the completion boundary
+<!-- ### `waitUntilCompleted()` is the completion boundary -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-## 6. The pointer problem: shadow buffers and coherence
+<!-- ## 6. The pointer problem: shadow buffers and coherence -->
 
-### Why `Buffer::contents()` cannot send a pointer over the network
+<!-- ### Why `Buffer::contents()` cannot send a pointer over the network -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Client-side shadow allocations
+<!-- ### Client-side shadow allocations -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Copying inputs at commit
+<!-- ### Copying inputs at commit -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Copying outputs after completion
+<!-- ### Copying outputs after completion -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### The unsupported mid-flight CPU/GPU access pattern
+<!-- ### The unsupported mid-flight CPU/GPU access pattern -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-## 7. The protobuf protocol
+<!-- ## 7. The protobuf protocol -->
 
-### Handles and create/release RPCs
+<!-- ### Handles and create/release RPCs -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Encoding a command buffer as metadata and bytes
+<!-- ### Encoding a command buffer as metadata and bytes -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### How protobuf frames repeated fields and `bytes`
+<!-- ### How protobuf frames repeated fields and `bytes` -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-## 8. gRPC is parallel: protecting shared server state
+<!-- ## 8. gRPC is parallel: protecting shared server state -->
 
-### The 100-client race-condition experiment
+<!-- ### The 100-client race-condition experiment -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### What the mutex actually protects
+<!-- ### What the mutex actually protects -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Why one global mutex is acceptable for the MVP
+<!-- ### Why one global mutex is acceptable for the MVP -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Why the mutex must not cover GPU waits
+<!-- ### Why the mutex must not cover GPU waits -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-## 9. The asynchronous command-buffer scheduler
+<!-- ## 9. The asynchronous command-buffer scheduler -->
 
-### RPC handlers enqueue jobs
+<!-- ### RPC handlers enqueue jobs -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### One scheduler thread submits to Metal
+<!-- ### One scheduler thread submits to Metal -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### FIFO ordering and same-queue dependencies
+<!-- ### FIFO ordering and same-queue dependencies -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Admission order is not GPU preemption
+<!-- ### Admission order is not GPU preemption -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-## 10. Resource lifetime across the network boundary
+<!-- ## 10. Resource lifetime across the network boundary -->
 
-### Why native Metal retains resources after commit
+<!-- ### Why native Metal retains resources after commit -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### The current release-before-wait limitation
+<!-- ### The current release-before-wait limitation -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### What `PendingJob` must eventually own
+<!-- ### What `PendingJob` must eventually own -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-## 11. What the working demo proves
+<!-- ## 11. What the working demo proves -->
 
-### A vector-add program with the same client source
+<!-- ### A vector-add program with the same client source -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Remote execution and result verification
+<!-- ### Remote execution and result verification -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Concurrent clients sharing one server and GPU
+<!-- ### Concurrent clients sharing one server and GPU -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### What has not been measured
+<!-- ### What has not been measured -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-## 12. Thunder Compute and TNR: two different tradeoffs
+<!-- ## 12. Thunder Compute and TNR: two different tradeoffs -->
 
-### Thunder's exclusive GPU-lease model
+<!-- ### Thunder's exclusive GPU-lease model -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### This project's command-buffer multiplexing model
+<!-- ### This project's command-buffer multiplexing model -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### VRAM, fairness, isolation, and predictability
+<!-- ### VRAM, fairness, isolation, and predictability -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Why neither design dominates the other
+<!-- ### Why neither design dominates the other -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-## 13. The semantic contract
+<!-- ## 13. The semantic contract -->
 
-### Preserving Metal meaning, not Metal timing
+<!-- ### Preserving Metal meaning, not Metal timing -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### The supported-shim boundary
+<!-- ### The supported-shim boundary -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Honest claims about valid programs and dishonest clients
+<!-- ### Honest claims about valid programs and dishonest clients -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-## 14. What remains
+<!-- ## 14. What remains -->
 
-### Native-compatible resource lifetime
+<!-- ### Native-compatible resource lifetime -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Broader Metal storage and synchronization modes
+<!-- ### Broader Metal storage and synchronization modes -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Session isolation and security
+<!-- ### Session isolation and security -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### Scheduler instrumentation and utilization experiments
+<!-- ### Scheduler instrumentation and utilization experiments -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-## 15. Closing perspective
+<!-- ## 15. Closing perspective -->
 
-### A working remoter before a production virtual GPU
+<!-- ### A working remoter before a production virtual GPU -->
 
-lorem ipsum
+<!-- lorem ipsum -->
 
-### The next experiment
+<!-- ### The next experiment -->
 
-lorem ipsum
+<!-- lorem ipsum -->
