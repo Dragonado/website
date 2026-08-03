@@ -113,11 +113,47 @@ A typical `metal-cpp` object call instead looks like this:
 void *data = buffer->contents();
 ```
 
-The `contents()` wrapper is inline and eventually sends an Objective-C message using the object and a selector. At the dynamic-link layer, many different Objective-C methods pass through the same generic message-dispatch machinery. There is no separate `MTLBuffer_contents` function symbol that I can simply replace. Intercepting the generic Objective-C dispatcher would also catch messages from the rest of the process, not just Metal. 
+The actual inline `metal-cpp` wrapper is effectively this:
+
+```cpp
+void *MTL::Buffer::contents() {
+    return Object::sendMessage<void *>(this, _MTL_PRIVATE_SEL(contents));
+}
+```
+
+After the wrapper is inlined, the important part is approximately equivalent to:
+
+```cpp
+void *data = reinterpret_cast<void *(*)(void *, SEL)>(objc_msgSend)(
+    buffer,
+    sel_registerName("contents"));
+```
+
+So if I inspect the undefined function symbols in the final Mach-O binary, the relevant entry looks like this:
+
+```text
+                 U _objc_msgSend
+```
+
+There is no `_MTLBuffer_contents` function symbol. `contents` is stored separately as an Objective-C selector. On an Apple Silicon Mac, the call is conceptually shaped like this in assembly:
+
+```asm
+mov  x0, buffer        ; receiver object
+ldr  x1, contents_sel  ; selector: "contents"
+bl   _objc_msgSend     ; the one generic dispatch function
+```
+
+Like how am I supposed to intercept this bruh?
+
+`setLength:`, `newCommandQueue`, `commit`, and thousands of non-Metal Objective-C methods all use that same `_objc_msgSend` symbol. The object in `x0` and selector in `x1` tell the Objective-C runtime which implementation to execute. At the dynamic-link layer, there is therefore no separate Metal symbol that I can replace for each method. Intercepting `_objc_msgSend` would catch messages from the entire process, not just Metal.
 
 #### The fix
 
-That is why I substitute my own `MTL` namespace while compiling the client instead.
+That is why I substitute my own `MTL` (`MetalShim`) namespace while compiling the client instead lmao.
+
+No worry about runtime if I'm literally changing the code written by the user at compile time. The only con? I'm changing the code written by the user.
+
+The user may expect their code to be compiled in a certain way but since I'm front-running their MTL:: userspace with my own MetalShim:: userspace, the compiled binary will obviously be different.
 
 ### Unified Memory
 
