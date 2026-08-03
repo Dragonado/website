@@ -1,0 +1,33 @@
+{% extends "main.html" %}
+
+{% block container %}
+  <div class="md-content md-content--post" data-md-component="content">
+    <article class="md-content__inner md-typeset">
+      <div class="algorithmica-post-meta">
+        <div>
+          <span class="algorithmica-post-meta__label">Published</span>
+          <time datetime="{{ page.config.date.created }}">
+            {{- page.config.date.created | date -}}
+          </time>
+        </div>
+        {% if page.config.date.updated %}
+          <div>
+            <span class="algorithmica-post-meta__label">Updated</span>
+            <time datetime="{{ page.config.date.updated }}">
+              {{- page.config.date.updated | date -}}
+            </time>
+          </div>
+        {% endif %}
+        {% if page.config.readtime %}
+          <div>
+            <span class="algorithmica-post-meta__label">Reading time</span>
+            <span>{{ page.config.readtime }} min</span>
+          </div>
+        {% endif %}
+      </div>
+      {% block content %}
+        {% include "partials/content.html" %}
+      {% endblock %}
+    </article>
+  </div>
+{% endblock %}

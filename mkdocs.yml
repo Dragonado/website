@@ -12,12 +12,12 @@ edit_uri: edit/main/docs/
 
 theme:
   name: material
+  custom_dir: overrides
   features:
     - navigation.instant
     - navigation.instant.progress
+    - navigation.indexes
     - navigation.tracking
-    - navigation.tabs
-    - navigation.tabs.sticky
     - navigation.top
     - search.suggest
     - search.highlight
@@ -41,18 +41,26 @@ theme:
         icon: material/weather-night
         name: Switch to light mode
   font:
-    text: Inter
-    code: JetBrains Mono
+    text: Source Sans 3
+    code: Inconsolata
   icon:
     repo: fontawesome/brands/github
 
 nav:
   - Home: index.md
   - About: about.md
-  - Projects: projects.md
+  - Projects:
+      - projects/index.md
+      - Buzzcoin: https://github.com/Dragonado/carnival-deal
+      - Corrent: https://github.com/Dragonado/corrent
+      - CodePal: https://github.com/Dragonado/CodePal
+      - CP problem sets: https://github.com/Dragonado/my_CP_problems
   - Blog:
       - blog/index.md
   - CV: https://www.chaithu.in/assets/cv.pdf
+
+hooks:
+  - hooks/blog_nav.py
 
 plugins:
   - search
@@ -107,4 +115,12 @@ extra:
       name: Email
 
 copyright: >
-  Copyright &copy; 2026 Chaithanya Shyam Delanthabettu
+  Copyright &copy; 2026 Chaithanya Shyam Delanthabettu ·
+  Design adapted from <a href="https://github.com/algorithmica-org/algorithmica">Algorithmica</a>
+  by Sergey Slotin under the MIT License
+
+extra_css:
+  - stylesheets/algorithmica.css
+
+extra_javascript:
+  - javascripts/algorithmica.js

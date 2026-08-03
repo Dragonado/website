@@ -9,6 +9,8 @@ date: 2026-05-15
 
 A few weeks ago, a friend of mine asked me "@Chai, do you have an idle server running that I can ssh into? I want to host an experimental server that people can query for a course project."
 
+<!-- more -->
+
 I was so mind-boggled with this question. Is this such a casual question to ask someone? Do students in this college just have idle servers running? Suppose I straight up gave access to my MacBook to host his server, how does one even create a server from scratch and serve others?
 
 I played it off cool and said "Nah bro, I don't have a server right now" to which he just said "Cool, I'll just rent an AWS box then. There should be a free trial available".

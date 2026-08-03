@@ -6,3 +6,5 @@ draft: true
 # Performance engineering: matrix multiplication
 
 TODO
+
+<!-- more -->

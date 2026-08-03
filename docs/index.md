@@ -1,6 +1,5 @@
 ---
 hide:
-  - navigation
   - toc
 ---
 
@@ -26,7 +25,7 @@ I am interested in everything CS and more.
 
     Buzzcoin (EIP-7702 on Sepolia), Corrent (Rust BitTorrent), CodePal, CP problem sets.
 
-    [:octicons-arrow-right-24: See projects](projects.md)
+    [:octicons-arrow-right-24: See projects](projects/index.md)
 
 -   :material-file-document:{ .lg .middle } __CV__
 

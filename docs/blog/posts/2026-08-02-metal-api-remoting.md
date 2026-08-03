@@ -5,7 +5,11 @@ draft: true
 
 # Remoting Metal: turning Apple’s local GPU API into a network protocol
 
+## Lore
+
 I've said this before and I'll say it again. Compared to my experience in corporate, Grad school is a very interesting place to be in. You meet people from many walks of life and people who will transition to all other walks of life. You get a glimpse into an area that you would never have had the oppurtunity to know about as compared to a static workplace. 
+
+<!-- more -->
 
 Anyways, One of my friends introduced me to a very interesting statup from Georgia Tech (#GoJackets! :bee:) called [ThunderCompute](www.thundercompute.com). They are riding the AI wave and are selling cheap GPU compute. Possibly the cheapest I have ever found so far (?!). The closest I have seen are spot instances given by AWS/GCP/Azure but those are quite risky to run ML workloads since they can be terminated at the providers will. 
 
@@ -21,7 +25,7 @@ The simple answer is: Oversubscription :stars:
 
 ## Oversubscription
 
-What does what mean? Basically, you sell a piece of something to a user. Then you sell the same thing at the same time again to a different user. With this secret technique, you have essentially reduced costs while also increasing revenue. If you can pull this off then you can arbitrage this to infinity and become a trillionaire.
+What does what mean? Basically, you sell an item to a user. Then, when the first user is not using the item, you sell the same item to a different user. With this secret technique, you have essentially reduced costs while also increasing revenue. If you can pull this off then you can arbitrage this to infinity and become a trillionaire.
 
 All jokes aside, oversubscription is a pretty common thing. It is literally how banks work, they lend out more money than they actually have. But in a more relevant example, cloud providers also do this.
 
@@ -29,20 +33,29 @@ For example, if you pay for 100GB disk space on your serverless function and you
 
 What if happens if every single user decides to utilize 100% of their resources? Idk man what happens if everyone withdrew all their money from the bank? Civilization collapses or sumthing. Just have faith in the [LLN gods](https://en.wikipedia.org/wiki/Law_of_large_numbers) (not a typo) and pray this doesn't happen.
 
-So, I was very interested how ThuNdeRcompute (TNR), manages to oversubscribe their GPU. The way they do it so simple yet so smart. For most ML workfloads, the GPU is idle a lot of the time. What if you could run that GPU on a different ML workload that someone else is waiting on? That would be nice but we can't do that since the GPU is literally attached to the CPU that the first user is doing. Oh, but then what if we detach the GPU and make it remote? That way could schedule the GPU jobs from different users and schedule them as we want. Perhaps connect the CPU and GPU via a internet protocol? Yeah let's do this and call it GPU-over-TCP :absolute-cinema:
+I was very interested how ThuNdeRcompute (TNR) manages to oversubscribe their GPU. The way they do it so simple yet so smart. For most ML workfloads, the GPU is idle a lot of the time. What if you could run that GPU on a different ML workload that someone else is waiting on? That would be nice but we can't do that since the GPU is literally attached to the CPU that the first user is doing. Oh, but then what if we detach the GPU and make it remote? That way could pool GPU jobs from different users and schedule them as we want. Perhaps connect the CPU and GPU via a internet protocol? Yeah let's do this and call it GPU-over-TCP :absolute-cinema:
 
 Yeah so basically, they intercept your code's GPU CUDA calls, forward them over the internet via TCP to a real GPU, compute it there, give back the result via TCP again. Sounds simple but insanely hard to achieve. But once you are able to do it, you can oversubscribe your GPUs and make compute cheap and everyone wins!
 
-Their only downsides:
+The obvious downsides are:
+-  _Network latency & throughput_: Moving data from CPU to GPU via PCIe bus is faster and has more throughput than TCP.
+-  Not suitable for all workloads: TNR makes a profit by identifying GPU idleness and exploiting it. However, if your workload has the GPU running all the time (for example calculating hashes for a certain reason :hint-hint:) then it's not a particularly useful load for the company.
 
-1. Network latency/throughput: Obviously a PCIe bus is faster and has more throughput than TCP.
-2. GPU availability: Because they own substantially less hardware than most cloud providers, I could never find a popular GPU like H100 available.
+Fascinated by all this, I decided to make my own GPU-over-TCP but since I'm constrained to my dusty 5-year old Macbook air with M1 chip with a single GPU, I have to make several changes to what TNR does.
 
-Fascinated by all this, I decided to make my own GPU-over-TCP but since I'm constrained to a 5-year old Macbook M1 air with a single GPU, I have to make several changes than what TNR does.
+Btw they also have a student program where you get a free $20 in GPU credits (~9hrs of a H100).
 
-Btw they also have a student program where you get a free $20 in GPU credits (~9hrs of a H100), here is my [referral link](https://console.thundercompute.com/signup?ref=organization-live-1ed6c8f1-2923-440c-b926-a807c64c8ccf&utm_medium=referral&utm_source=console).
+## The motivation: I wanted a remote Metal GPU
 
-## 1. The motivation: I wanted a remote Metal GPU
+Some terminology:
+
+- Objective-C: A general purpose language that, as far as I know, is primarly used by Apple.
+- Metal-cpp: A low-overhead C++ interface for Metal that converts your C++ code to Objective-C code. 
+- Metal: The framework developed by Apple used to talk to the GPU in your Mac. 
+- API: An abstract term for a contract in which a person guarantees to return a specifc value for a specific input.
+- Remoting: An abstract term for a system that lets an application run code in another computer.
+
+Combine the last 3 terms to get Metal-API-Remoting and we get the title of the blog and the project that I want to do.
 
 There are two reasons why this project was doomed to fail:
 
