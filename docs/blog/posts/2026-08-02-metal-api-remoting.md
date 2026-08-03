@@ -18,7 +18,7 @@ I was very curious as to how they could possibly offer such low GPU prices with 
 2. sole-tenancy 
 3. No forced preemption
 
-Surely these must be VC subsidised GPU and hence bleeding money right? But no, I don't think so. 
+How could they be offering a price cheaper than the big cloud players? What are they doing different?
 
 The simple answer is: Oversubscription :stars:
 
@@ -34,9 +34,9 @@ For example, if you pay for 100GB disk space on your serverless function and you
 
 What if happens if every single user decides to utilize 100% of their resources? Idk man what happens if everyone withdrew all their money from the bank? Civilization collapses or sumthing. Just have faith in the [LLN gods](https://en.wikipedia.org/wiki/Law_of_large_numbers) (not a typo) and pray this doesn't happen.
 
-I was very interested how ThuNdeRcompute (TNR) manages to oversubscribe their GPU. The way they do it so simple yet so smart. For most ML workloads, the GPU is idle a lot of the time. What if you could run that GPU on a different ML workload that someone else is waiting on? That would be nice but we can't do that since the GPU is literally attached to the CPU that the first user is doing. Oh, but then what if we detach the GPU and make it remote? That way could pool GPU jobs from different users and schedule them as we want. Perhaps connect the CPU and GPU via an internet protocol? Yeah let's do this and call it GPU-over-TCP :absolute-cinema:
+I was very interested how ThuNdeRcompute (TNR) manages to oversubscribe their GPU. The way they do it so simple yet so smart. For most ML workloads, the GPU is idle a lot of the time. What if you could run that GPU on a different ML workload that someone else is waiting on? That would be nice but we can't do that since the GPU is literally attached to the CPU that the first user is doing. Oh, but then what if we detach the GPU and make it remote? That way could pool GPU jobs from different users and schedule them as we want. Perhaps connect the CPU and GPU via an network protocol? Yeah let's do this and call it GPU-over-TCP :absolute-cinema:
 
-Yeah so basically, they intercept your code's GPU CUDA calls, forward them over the internet via TCP to a real GPU, compute it there, give back the result via TCP again. Sounds simple but insanely hard to achieve. But once you are able to do it, you can oversubscribe your GPUs and make compute cheap and everyone wins!
+Yeah so basically, they intercept your code's GPU CUDA calls, forward them over the network via TCP to a real GPU, compute it there, give back the result via TCP again. Sounds simple but insanely hard to achieve. But once you are able to do it, you can oversubscribe your GPUs and make compute cheap and everyone wins!
 
 The obvious downsides are:
 
@@ -62,14 +62,14 @@ It'll make more sense when you read the next sections but here is the architectu
 The software setup:
 
 - C++: This is my favorite language.
-- [metal-cpp](https://developer.apple.com/metal/cpp/): The only way to talk to my GPU in C++.
-- [gRPC](https://grpc.io) for networking: Every time I have to pass data via the network, I thank Google for creating gRPC. They abstract away so many things like security, multithreading, retries, data encoding/decoding and its obviously designed to scale.
+- [metal-cpp](https://developer.apple.com/metal/cpp/): A framework that allows me to talk to my GPU in C++.
+- [gRPC](https://grpc.io) for networking: Every time I have to pass data via the network, I thank Google for creating gRPC. It handles so much of the RPC plumbing and provides built-in support for serialization, concurrent requests, retries, and its obviously designed to scale.
 - Shim header: This is 50% of the project that silently adds a piece code to the user's code that will hijack all their metal calls and convert them to network calls.
 - Server code: This is the other 50% of the project that receives GPU requests via the network and is supposed to schedule, compute and return the result.
 
 ## Ominous Premonition
 
-On first glance, the project seems like a nice idea. Just copy what TNR does but do it for metal-cpp. No one else in the world seems to have done anything like this. Exciting!
+On first glance, the project seems like a nice idea. Just copy what TNR does but do it for metal-cpp. I can't seem to find anyone else in the world that has done this kind of thing either. Exciting to be the first to build it!
 
 However there are at least two reasons why no one has done this and why my project is a much much harder to solve than TNR:
 
@@ -83,6 +83,30 @@ We have to intercept the client code at some point and forward their GPU calls t
 TNR does this at the dynamic link layer. 
 
 They catch the symbols, that are generated after compilation, that calls the GPU and replace it with their. They can do this because CUDA literally publishes documentation about their [ABI table in their website](https://docs.nvidia.com/cuda/ptx-writers-guide-to-interoperability/index.html).
+
+Unfortunately, I cannot do this becauase Apple don't have documentation for this and also literally almost all the metal calls in cpp are just Objective-C object message sends that are resolved at runtime. So there is no 1:1 mapping of GPU function -> symbol for me to intercept and put my own symbol.
+
+It would be extremely laborous and fragile to intercept objective-C calls that are resolved at runtime.
+
+[CHAT: give example of simple ABIs for Cuda and metal]
+
+### Unified Memory
+
+In Nvidia GPUs, there is a clear divide between CPU and GPU. In fact, GPUs have their own RAM/cache/memory and stuff. The way the CPU sends data to the GPU is via the PCI Express bus that is actually very fast with high throughput.
+
+This express bus is invoked by the `cudaMemcpy` function that you usually see in CUDA programs which loads and unloads data from GPU.
+
+The consequence of this is that the programmer conceptually writes their program thinking that CPU and GPU are different entities that need to share data. TNR takes advantage of this model and literally the only difference is that instead of the PCIe, the data travels via TCP instead.
+
+Its slower for sure but there is no possibility of incorrectness. 
+
+However, Apple has opted for the unified memory architecture. Which means while the CPU and GPU have their own private resources like cache, mainly they the same RAM and have nothing to transfer between the two.
+
+The programmer would then assume that CPU/GPU is the same and would expect every program of theirs to run in this model. However, I literally create a divide between CPU and GPU and need to transfer data between them.
+
+This causes a lot of issues and in some cases even the correctness of it cannot be resolved.
+
+[CHAT: Give a simple example of cuda and metal difference]
 
 
 TODO: Rest of blog.
