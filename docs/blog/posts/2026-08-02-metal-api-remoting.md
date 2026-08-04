@@ -310,7 +310,7 @@ So when the client calls this function, we have to have the server mint a new de
 
 So whenver the client then calls a function with the `device` pointer, two things can happen:
 
-1. The function uses the locally stored metadata sent by the server. For example, `device->DeviceName()` is just a string that is stored in the clients memory when the device was first minted by the server.
+1. The function uses the locally stored metadata sent by the server. For example, `device->name()` is just a string that is stored in the clients memory when the device was first minted by the server.
 2. The function makes a network call to the server. For example, `device->newCommandQueue()` needs a new command queue to be minted. So the function calls the server, but then how does the server know which device handle to use? It has many. Thats where the `device_id` comes in handy. The client has identifed that "hey the device handle that is mapped to `device_id` is what you have to use".
 
 Here is the "hijacked" `Device` class that the client receives:
@@ -418,13 +418,13 @@ At `commit()`, the client sends the command-queue ID, pipeline-state ID, grid si
 
 The server does this directly inside the `CommitCommandBuffer` RPC. It looks up the real queue, pipeline, and buffers, creates a native Metal command buffer and compute encoder, copies the packed input bytes into the real buffers, restores every buffer binding, and calls the real `dispatchThreads()` and `commit()`.
 
-It then stores the native command-buffer pointer in `command_buffer_map_` under a new ID and returned that ID to the client. There is no job state machine, scheduler thread, or completion callback yet. The RPC simply submitted the work to Metal and returned. The future section will have why it's necessary to have these things when scaling.
+It then stores the native command-buffer pointer in `command_buffer_map_` under a new ID and returns that ID to the client. There is no job state machine, scheduler thread, or completion callback yet. The RPC simply submits the work to Metal and returned. The future section will have why it's necessary to have these things when scaling.
 
 ### Server -> client flow
 
 `waitUntilCompleted()` sends the `command_buffer_id` back to the server. The initial handler looked up the native pointer in `command_buffer_map_` and directly called Metal's `command_buffer->waitUntilCompleted()`. The gRPC handler stayed blocked until the GPU work finished.
 
-The server then concatenates the contents of the real buffers into the response. The client splits those bytes using the known buffer lengths and copies them into its shadow buffers. From the original program's point of view, the same pointers returned by `Buffer::contents()` now contained the GPU's results.
+The server then concatenates the contents of the real buffers into the response. The client splits those bytes using the known buffer lengths and copies them into its shadow buffers. From the original program's point of view, the same pointers returned by `Buffer::contents()` now contains the GPU's results.
 
 So after `waitUntilCompleted()` the involved client buffers and server buffers are in sync!
 
@@ -490,7 +490,10 @@ This implementation has two obvious multi-client problems.
 1.  Without synchronization, concurrent RPC handlers could race while incrementing stateful objects `counter_` or reading and writing the handle maps. For example, 1 thread would read and increment the value of `device_id` while the other thread still reads the old `device_id` value. This would map the same `device_id` to two different handles which is disastrous.
 2. Putting one giant lock around every handler prevents those races, but holding that lock while waiting for the GPU serializes the entire things. Client B cannot even enqueue ready work while client A is blocked in a completely unrelated RPC.
 
-The solution to this is, yet again, **STATE MACHINES**! I encountered this same problem in my [previous blog](https://www.chaithu.in/blog/2026/05/15/the-simple-task-of-hosting-an-api/#4-epoll-non-blocking-io) and now much more prepared for multi-threading and state machines.
+The solution to this is, yet again, **STATE MACHINES**! More precisely, I needed protected shared state plus a state machine for every asynchronous job.
+
+I encountered this same problem in my [previous blog](https://www.chaithu.in/blog/2026/05/15/the-simple-task-of-hosting-an-api/#4-epoll-non-blocking-io) and now much more prepared for multi-threading and state machines.
+
 
 ### My beautiful Stateful machine
 
@@ -544,7 +547,7 @@ We of course need to add mutex and server_shutdown for our server.
 };
 ```
 
-Of course this just the setup. Every RPC touching shared state now needs to be modified to write race-free code using the mutex and condition variables.
+Of course this just the setup. Every RPC touching shared state now needs to be modified to write race-free code using the mutex and/or condition variables.
 
 Most of them are boring changes but the scheduler thread is most interesting to me. Here it is:
 
