@@ -393,54 +393,60 @@ Device ID
 
 <!-- Lorem ipsum. -->
 
-### The RPC boundaries: create, commit, wait, and release
+### client -> server flow
+
+[CHAT: Add a table telling which methods were remoted, which were stored locally, which were async nonblocking calls and which were sync blocking]
 
 <!-- Lorem ipsum. -->
 
-<!-- ## `commit()` and `waitUntilCompleted()` -->
-
-<!-- ### Sending command metadata and input bytes at commit -->
+### Executing the real Metal command buffer on the server
 
 <!-- Lorem ipsum. -->
 
-<!-- ### Executing the real Metal command buffer on the server -->
+### Server -> client flow
 
 <!-- Lorem ipsum. -->
 
-<!-- ### Copying completed results back into shadow buffers -->
+## Initil working example!
+
+### But does it scale? No
+
+[CHAT: Insert obvious problem of why we cant do multiple calls at the same time which segways into concurrency]
+
+[Two problems right? race conditions and blocking GPU iirc]
+
+## gRPC concurrency and the asynchronous scheduler
+
+[CHAT: insert how grpc is inherently concurrent but the state variables that we create arent! and hence we need to make our code also async to ahndle multiple calls]
+
+### Concurrent RPC handlers and shared server state
 
 <!-- Lorem ipsum. -->
 
-<!-- ## gRPC concurrency and the asynchronous scheduler -->
-
-<!-- ### Concurrent RPC handlers and shared server state -->
+### The 100-client race-condition experiment
 
 <!-- Lorem ipsum. -->
 
-<!-- ### The 100-client race-condition experiment -->
+TODO for me: add screenshot of script.
+
+### Enqueuing jobs for a scheduler thread
+
+[CHAT: now that we have multiple calls, we need to decide the order in which to execute. We need to maintain our invariant of "   // Suppose there are two jobs (q1, c1) and (q2, c2). Where q = command queue and c = command buffer and c1 was commited before c2 by the client.
+    // Then the ONLY schedule ordering invariant the server must hold is: if q1 == q2 then c1 commits before c2."]
+
+    the simplest solution is FIFO which we do but it can easily be reconfigured to somethning else.
 
 <!-- Lorem ipsum. -->
 
-<!-- ### Enqueuing jobs for a scheduler thread -->
+## Final Working demo
+
+TODO for me: add ss.
+
+### What the demo proves and what it does not
 
 <!-- Lorem ipsum. -->
 
-<!-- ### Queue ordering without GPU preemption -->
-
-<!-- Lorem ipsum. -->
-
-<!-- ## Working demo -->
-
-<!-- ### One source program, native or remote -->
-
-<!-- Lorem ipsum. -->
-
-<!-- ### Correct remote execution and concurrent clients -->
-
-<!-- Lorem ipsum. -->
-
-<!-- ### What the demo proves and what it does not -->
-
-<!-- Lorem ipsum. -->
-
+## Caveats, pitfalls and short comings
 <!-- Caveat to mention here: remote object and queued-resource lifetimes do not yet fully reproduce native Metal behavior. -->
+
+## Closing remarks
