@@ -294,31 +294,106 @@ But this requires the programmer to code in a certain way. They have to follow t
 I'm sure there are many ways to fix it but they are all complicated to implement. I'll take this con of enforcing write->commit->wait->read pattern and live with it for now.
 
 
-<!-- ## Turning Metal objects into remote handles -->
+## Turning Metal objects into remote handles
 
-<!-- ### A pointer cannot cross machines -->
+Literally the first thing we do in metal-cpp is create a device handle that represents a GPU which is the below:
+
+```cpp
+MTL::Device *device = MTL::CreateSystemDefaultDevice();
+```
+
+So device here is pointer that points to some memory 0x123. Clearly it makes no sense to let the client create the device handle and then pass the device pointer to the server. 
+
+So when the client calls this function, we have to have the server mint a new device handle and a mapping of this handle to a `device_id`. The server then passes the `device_id` with some overloaded functions to the client.
+
+So whenver the client then calls a function with the `device` pointer, two things can happen:
+
+1. The function uses the locally stored metadata sent by the server. For example, `device->DeviceName()` is just a string that is stored in the clients memory when the device was first minted by the server.
+2. The function makes a network call to the server. For example, `device->newCommandQueue()` needs a new command queue to be minted. So the function calls the server, but then how does the server know which device handle to use? It has many. Thats where the `device_id` comes in handy. The client has identifed that "hey the device handle that is mapped to `device_id` is what you have to use".
+
+Here is the "hijacked" `Device` class that the client recieves:
+
+```cpp
+namespace MTLShim {
+class Device {
+  public:
+    Device(uint32_t device_id, NS::String *device_name) : device_id_(device_id), device_name_(device_name) {
+        device_name_->retain();
+    }
+
+    ~Device() {
+        device_name_->release();
+    }
+
+    // local calls.
+    NS::String *name();
+    uint32_t device_id();
+
+    // network calls.
+    CommandQueue *newCommandQueue();
+    ComputePipelineState *newComputePipelineState(const Function *func, NS::Error **error);
+    Library *newLibrary(const NS::String *source, const CompileOptions *options, NS::Error **error);
+    Buffer *newBuffer(NS::UInteger length, MTL::ResourceOptions options);
+
+
+    void release();
+
+  private:
+    uint32_t device_id_;
+    NS::String *device_name_;
+};
+}
+```
+
+and this is what the server code for minting a device looks like:
+
+```cpp
+Status CreateSystemDefaultDeviceShim(ServerContext *context, const CreateSystemDefaultDeviceShimRequest *request, CreateSystemDefaultDeviceShimResponse *response) override {
+        MTL::Device *device;
+        device = MTL::CreateSystemDefaultDevice();
+        if (device == nullptr) {
+            return Status(StatusCode::INTERNAL, "Could not create metal device.");
+        }
+
+        counter_++;
+        device_map_[counter_] = device;
+        response->set_device_id(counter_);
+        response->set_device_name(device->name()->cString(NS::UTF8StringEncoding));
+
+        return Status::OK;
+    }
+```
+
+You can find the source code [here](https://github.com/Dragonado/metal-api-remoter/blob/main/metal/metal_shim.h). 
+
+### Rebuilding Metal's object graph with IDs
+
+But we have many Metal objects, not just `Device`. We have objects for command queues, buffers, libraries, functions, compute pipelines states, etc,.
+
+All of them need to be minted by the server and then linked by an ID.
+
+The heirarchy looks something like:
+
+```text
+Device ID
+├── CommandQueue ID
+├── Buffer ID
+└── Library ID
+    └── Function ID
+        └── ComputePipelineState ID
+```
+
+## Which calls cross the network?
+
+### Creation and server-state queries
 
 <!-- Lorem ipsum. -->
 
-<!-- ### Rebuilding Metal's object graph with IDs -->
+### Recording commands locally
 
 <!-- Lorem ipsum. -->
 
-<!-- ### Remote object lifetimes -->
-
-<!-- Lorem ipsum. -->
-
-<!-- ## Which calls cross the network? -->
-
-<!-- ### Creation and server-state queries -->
-
-<!-- Lorem ipsum. -->
-
-<!-- ### Recording commands locally -->
-
-<!-- Lorem ipsum. -->
-
-<!-- ### The RPC boundaries: create, commit, wait, and release -->
+### The RPC boundaries: create, commit, wait, and release
 
 <!-- Lorem ipsum. -->
 
@@ -367,3 +442,5 @@ I'm sure there are many ways to fix it but they are all complicated to implement
 <!-- ### What the demo proves and what it does not -->
 
 <!-- Lorem ipsum. -->
+
+<!-- Caveat to mention here: remote object and queued-resource lifetimes do not yet fully reproduce native Metal behavior. -->

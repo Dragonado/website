@@ -9,7 +9,7 @@ The published draft is already approximately an 11-minute read. Cap the finished
 1. **Turning Metal objects into remote handles**
    - Explain why pointers cannot cross machines.
    - Show how client proxy objects carry IDs that identify real server-side Metal objects.
-   - Briefly cover the `Device` → queue/buffer/library → function/pipeline object graph and remote lifetimes.
+   - Briefly cover the `Device` → queue/buffer/library → function/pipeline object graph.
 
 2. **Which calls cross the network?**
    - Creation and server-state queries use synchronous RPCs.
@@ -37,6 +37,7 @@ The published draft is already approximately an 11-minute read. Cap the finished
    - Show remote execution, copied-back results, verification, and concurrent clients.
    - Claim correctness and concurrent remote submission only.
    - Do not claim an utilization improvement or performance win that has not been measured.
+   - Near the end, list remote object and queued-resource lifetime behavior as an outstanding caveat. Do not interrupt the remote-handle explanation with a full lifetime section.
 
 The intended remaining flow is:
 
