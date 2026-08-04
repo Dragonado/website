@@ -68,6 +68,8 @@ The software setup:
 - C++: This is my favorite language.
 - [metal-cpp](https://developer.apple.com/metal/cpp/): An interface that allows me to talk to my GPU in C++.
 - [gRPC](https://grpc.io) for networking: Every time I have to pass data via the network, I thank Google for creating gRPC. It handles so much of the RPC plumbing and provides built-in support for serialization, concurrent requests, retries, and its obviously designed to scale.
+- [Protocol buffer](https://protobuf.dev) for serialization.
+- [Bazel](https://bazel.build) for the build system. Pairs nicely with gRPC and protobuf.
 - Shim header: This is 50% of MAR that silently adds a piece code to the user's code that will hijack all their metal calls and convert them to network calls.
 - Server code: This is the other 50% of MAR that receives GPU requests via the network and is supposed to schedule, compute and return the result.
 
@@ -77,7 +79,7 @@ I have written a very simple example of adding two arrays using the Apple GPU an
 
 The GPU part of the code:
 
-```metal
+```cpp
 #include <metal_stdlib>
 using namespace metal;
 
@@ -410,72 +412,235 @@ The rule ended up looking like this:
 | `waitUntilCompleted()` | Wait and copy completed bytes into client buffers | Synchronous blocking RPC |
 | `release()` | Delete the corresponding server handle | Synchronous RPC |
 
-At `commit()`, the client sends the command-queue ID, pipeline-state ID, grid sizes, buffer IDs, offsets, shader argument indices, and all bound buffer bytes. The server returns a newly minted `command_buffer_id`. That ID represents this particular submitted job.
+At `commit()`, the client sends the command-queue ID, pipeline-state ID, grid sizes, buffer IDs, offsets, shader argument indices, and all bound buffer bytes. The server returns a newly minted `command_buffer_id` that the client can later pass to `waitUntilCompleted()`.
 
 ### Executing the real Metal command buffer on the server
 
-The server validates those IDs and places a copy of the request into a `Job`. When the scheduler selects it, the server looks up the real queue, pipeline, and buffers, creates a native Metal command buffer and compute encoder, copies the packed input bytes into the real buffers, restores every buffer binding, and calls the real `dispatchThreads()` and `commit()`.
+The serves does this directly inside the `CommitCommandBuffer` RPC. It looks up the real queue, pipeline, and buffers, creats a native Metal command buffer and compute encoder, copies the packed input bytes into the real buffers, restors every buffer binding, and calls the real `dispatchThreads()` and `commit()`.
 
-Metal executes the job asynchronously.
+It then stores the native command-buffer pointer in `command_buffer_map_` under a new ID and returned that ID to the client. There is no job state machine, scheduler thread, or completion callback yet. The RPC simply submitted the work to Metal and returned. The future section will have why it's necessary to have these things when scaling.
 
 ### Server -> client flow
 
-`waitUntilCompleted()` sends the `command_buffer_id` back to the server. If the job is still queued or running, that RPC waits on the job's completion condition. Importantly, it sleeps without holding the global mutex, so other RPCs can continue using the server.
+`waitUntilCompleted()` sends the `command_buffer_id` back to the server. The initial handler looked up the native pointer in `command_buffer_map_` and directly called Metal's `command_buffer->waitUntilCompleted()`. The gRPC handler stayed blocked until the GPU work finished.
 
-After Metal reports completion, the server concatenates the contents of the real buffers into the response. The client splits those bytes using the known buffer lengths and copies them into its shadow buffers. From the original program's point of view, the same pointers returned by `Buffer::contents()` now contain the GPU's results.
+The server then concatenates the contents of the real buffers into the response. The client splits those bytes using the known buffer lengths and copies them into its shadow buffers. From the original program's point of view, the same pointers returned by `Buffer::contents()` now contained the GPU's results.
 
-## Initil working example!
+So after `waitUntilCompleted()` the client buffers and server buffers are in sync!
 
-At this point the original vector-adder ran end to end through MAR: the client created proxy objects, recorded the command locally, sent it through gRPC, executed it using real Metal on the server, copied the result back, and passed the same correctness check as the native program. Huge W. Unfortunately, one successful client says nothing about multiple clients.
+### Protocol Buffer definitions
 
-### But does it scale? No
+gRPC uses protobuf as its serialization format. So the below is my definition of (request, response, rpc) triplet that is needed for every API.
 
-The first implementation had two obvious multi-client problems. Without synchronization, concurrent RPC handlers could race while incrementing `counter_` or reading and writing the handle maps. Putting one giant lock around every handler prevents those races, but holding that lock while waiting for the GPU serializes the clients: client B cannot even enqueue ready work while client A is blocked in `waitUntilCompleted()`.
+```proto
+syntax = "proto3";
+package metal_remote;
 
-I needed short locks for shared bookkeeping and a separate asynchronous path for GPU submission.
+service MetalRemoteService {
+  rpc CreateSystemDefaultDeviceShim(CreateSystemDefaultDeviceShimRequest) returns (CreateSystemDefaultDeviceShimResponse);
+  rpc ReleaseDeviceShim(ReleaseDeviceShimRequest) returns (ReleaseDeviceShimResponse);
+  rpc CreateCommandQueueShim(CreateCommandQueueShimRequest) returns (CreateCommandQueueShimResponse);
+  rpc ReleaseCommandQueueShim(ReleaseCommandQueueShimRequest) returns (ReleaseCommandQueueShimResponse);
+  rpc CreateLibraryShim(CreateLibraryShimRequest) returns (CreateLibraryShimResponse);
+  rpc ReleaseLibraryShim(ReleaseLibraryShimRequest) returns (ReleaseLibraryShimResponse);
+  rpc CreateFunctionShim(CreateFunctionShimRequest) returns (CreateFunctionShimResponse);
+  rpc ReleaseFunctionShim(ReleaseFunctionShimRequest) returns (ReleaseFunctionShimResponse);
+  rpc CreateComputePipelineStateShim(CreateComputePipelineStateShimRequest) returns (CreateComputePipelineStateShimResponse);
+  rpc ReleaseComputePipelineStateShim(ReleaseComputePipelineStateShimRequest) returns (ReleaseComputePipelineStateShimResponse);
+  rpc CreateBufferShim(CreateBufferShimRequest) returns (CreateBufferShimResponse);
+  rpc ReleaseBufferShim(ReleaseBufferShimRequest) returns (ReleaseBufferShimResponse);
+  rpc CommitCommandBuffer(CommitCommandBufferRequest) returns (CommitCommandBufferResponse);
+  rpc WaitUntilCompleted(WaitUntilCompletedRequest) returns (WaitUntilCompletedResponse);
+}
 
-## gRPC concurrency and the asynchronous scheduler
+message CreateSystemDefaultDeviceShimRequest {}
 
-gRPC already invokes service methods concurrently. That does not make my `counter_`, maps, job queue, or job states thread-safe. MAR must synchronize that shared state itself, while making sure a thread waiting for one GPU job does not block unrelated RPC handlers.
+message CreateSystemDefaultDeviceShimResponse {
+  uint32 device_id = 1;
+  string device_name = 2;
+}
 
-### Concurrent RPC handlers and shared server state
+// .... many more request,response definitions.
+```
 
-Every access to the shared handle maps, counter, and job queue follows the same mutex protocol. A waiting RPC uses a condition variable, which releases the mutex while sleeping and reacquires it only when checking the completed state. The current MVP still performs some validation and input copying under the global lock, but it no longer holds that lock while waiting for the GPU to finish.
+Full source code can be found [here](https://github.com/Dragonado/metal-api-remoter/blob/main/proto/metal_remote.proto).
 
-The mutex does not protect the maps by magic. It works only because every thread that reads or writes those maps uses the same mutex.
+## Initial working example!
+
+At this point the original vector-adder runs end to end through MAR: the client created proxy objects, recorded the command locally, sent it through gRPC, executed it using real Metal on the server, copied the result back, and passed the same correctness check as the native program.
+
+I have successfully remoted this call and theoretically speaking I can run this code on my laptop, have the GPU work be completed on another machine, and get back the result in mine! There would only be network configurations to achieve this.
+
+The server listening for remote Metal calls:
+
+![Initial Metal API Remoter server listening on port 50051](../../assets/mar-initial-server-listening.png)
+
+The client running (after the server is live ofc):
+
+![Initial Metal API Remoter client reporting that the remote vector-add computation is correct](../../assets/mar-initial-client-success.png)
+
+Great success!
+
+### But does it scale? Hell Nah
+
+One small problem tho: My code literally cannot handle more than 1 client at a time (which sort of defeats the purpose of this whole project innit?)
+
+This implementation has two obvious multi-client problems.
+
+1.  Without synchronization, concurrent RPC handlers could race while incrementing stateful objects `counter_` or reading and writing the handle maps. For example, 1 thread would read and increment the value of `device_id` while the other thread still reads the old `device_id` value. This would map the same `device_id` to two different handles which is disastrous.
+2. Putting one giant lock around every handler prevents those races, but holding that lock while waiting for the GPU serializes the entire things. Client B cannot even enqueue ready work while client A is blocked in a completely unrelated RPC.
+
+The solution to this is, yet again, **STATE MACHINES**! I encountered this same problem in my [previous blog](https://www.chaithu.in/blog/2026/05/15/the-simple-task-of-hosting-an-api/#4-epoll-non-blocking-io) and now much more prepared for multi-threading and state machines.
+
+### My beautiful Stateful machine
+
+Now that we queue jobs, we need a way to find to define what kind of state the job can be in.
+
+```cpp
+enum class JobState {
+    NOT_STARTED,
+    QUEUED,
+    RUNNING,
+    COMPLETED,
+    FAILED,
+};
+
+struct Job {
+    uint32_t command_buffer_id;
+    CommitCommandBufferRequest request;
+    MTL::CommandBuffer *command_buffer = nullptr;
+    JobState state = JobState::NOT_STARTED;
+
+    Status failure_status;
+    std::condition_variable completed_cv; // tells the caller to wait until its completed.
+};
+```
+
+We of course need to add mutex and server_shutdown for our server.
+
+```cpp
+  //....
+  private:
+    std::atomic<uint32_t> counter_;
+    std::mutex mtx_; // efficiency can be improved if we used mutliple mutexes.
+    std::condition_variable scheduler_cv_;
+
+    std::deque<std::shared_ptr<Job>> ready_jobs_;
+    std::map<uint32_t, std::shared_ptr<Job>> job_map_;
+
+    // This is the main thread that waits to recieve jobs and schedules them to Metal according to its algo.
+    std::thread scheduler_thread_;
+
+    // A way to communicate with all threads that server needs to shutdown.
+    bool is_server_shutdown;
+
+    // All below map accesses happen within the mutex.
+    std::map<uint32_t, MTL::ComputePipelineState *> compute_pipeline_state_map_;
+    std::map<uint32_t, MTL::Function *> function_map_;
+    std::map<uint32_t, MTL::Library *> library_map_;
+    std::map<uint32_t, MTL::CommandQueue *> command_queue_map_;
+    std::map<uint32_t, MTL::Buffer *> buffer_map_;
+    std::map<uint32_t, MTL::Device *> device_map_;
+};
+```
+
+Of course this just the setup. Every RPC now needs to be modified to write race-free code using the mutex and conditional variables.
+
+Most of them are boring changes but the scheduler thread is most interesting to me. Here it is:
+
+```cpp
+// Dedicated thread to schedule GPU jobs.
+void scheduler_loop() {
+    while (true) {
+        std::unique_lock<std::mutex> lock(mtx_);
+        scheduler_cv_.wait(lock, [&]() { return is_server_shutdown || !ready_jobs_.empty(); });
+
+        if (is_server_shutdown)
+            break;
+
+        // CURRENT SCHEDULING LOGIC: FIFO
+        auto job = *ready_jobs_.begin();
+        ready_jobs_.pop_front();
+
+        job->state = JobState::RUNNING;
+
+        lock.unlock();
+        commit_job(job);
+    }
+}
+```
+
+### Scheduling constraints
+
+Now we have a new problem to solve. Suppose the scheduler has `N` jobs in its queue. Which one does it choose to dispatch to the GPU?
+
+You can have infinite complexity here and optimise for many things like time, cost, efficiency, etc,. However there is an invariant that all scheduling algorithms must follow to maintain correctneess!
+
+The ordering invariant is simple: suppose the client commits command buffer `c1` before `c2`. If both came from the same command queue, the server must submit `c1` before `c2`. Jobs from different queues have no ordering dependency.
+
+Consider this example:
+
+```cpp
+int x = 5;
+
+// c1: write the value 42 into buffer x.
+c1 = queue->commandBuffer();
+c1->encode(write_42_into(x));
+c1->commit();
+
+// c2: read x and copy it into output.
+c2 = queue->commandBuffer();
+c2->encode(copy(x, output));
+c2->commit();
+```
+
+Clearly c1 must run before c2 or else the `output` will be `5` instead of `42`.
+
+The simplest algo that statisfies this constraint is First-In-First-Out (FIFO) lol.
 
 ### The 100-client race-condition experiment
 
-I tested whether the locks were actually necessary by commenting them out and launching 100 adder processes concurrently. Three failed. Two clients were even assigned the same supposedly unique buffer ID because `counter_++` is a read-modify-write operation, not one indivisible action. Concurrent access to `std::map` was also a C++ data race, so later lookups could fail or the map could be corrupted.
+Writing a race-free multithreaded program for a big project like this is obviosuly challenging. My first attempt was riddled with bugs. I asked Codex to make a script that spawns 100 invocations of my adder program at the same time. I won't describe them here in detail but this one script helped me find so many race conditions in my program.
 
-After restoring the lock guards, all 100 clients completed and verified their results. gRPC provides concurrent RPC dispatch; the application still owns the thread safety of the service object behind those RPCs.
+Most notable:
 
-TODO for me: add screenshot of script.
+- Classic example: `counter_++` is obviously not an atomic operation. It is load, increment & store.
+- Reading from `std::map` while another thread writes to it is undefined behaviour.
+- Server shutdown had a classic lost-wakeup bug. I would notify the scheduler thread to shutdown but the scheduler would be doing some work at the time and ignore the notification since it wouldnt be on the conditional variable.
 
-### Enqueuing jobs for a scheduler thread
+After fixing all bugs, the 100 clients completed and verified their results!
 
-`commit()` now validates the request, creates a job, appends it to `ready_jobs_`, returns its ID, and wakes one dedicated scheduler thread. The scheduler currently pops jobs in FIFO order and submits them to Metal.
-
-The ordering invariant is simple: suppose the client commits command buffer `c1` before `c2`. If both came from the same command queue, the server must submit `c1` before `c2`. Jobs from different queues have no ordering dependency. FIFO is stronger than required because it orders everything, but it is an easy correct starting policy and can later be replaced with something smarter.
-
-The scheduler chooses which command buffer to submit next. It cannot pause a long command buffer halfway through and run another one; after submission, Metal's driver controls execution on the GPU.
+You can find the script [here](https://github.com/Dragonado/metal-api-remoter/blob/main/scripts/test_concurrent_adders.sh).
 
 ## Final Working demo
 
-TODO for me: add ss.
+![Final Metal API Remoter demo with all 100 concurrent adders producing the correct result](../../assets/mar-final-100-client-demo.png)
 
-### What the demo proves and what it does not
+Absolute Victory!
 
-The demo proves that the same supported vector-add source can run against native `metal-cpp` or be recompiled against MAR, execute through the network boundary, and produce the correct result. It also proves that 100 independent client processes can concurrently reach one server and be admitted through a thread-safe FIFO path.
+## Caveats and pitfalls faced
 
-It does **not** prove a performance win, better GPU utilization, production isolation, complete Metal compatibility, or a clever scheduling policy. The current FIFO scheduler is plumbing that makes the next experiment possible; metadata-aware gap filling and its measurement are future work.
+Some caveats of MAR that won't generalize to all metal programs:
 
-## Caveats, pitfalls and short comings
+- Limited API coverage: MAR implements only the compute methods required by the demo, not the entire Metal API.
+- Buffer copies: Every commit and wait currently transfers each bound buffer in full, even if only a few bytes changed.
+- write-commit-wait-read pattern: The snapshot model supports this sequence but cannot reproduce every asynchronous shared-memory access pattern allowed by native Metal.
+- Object lifetime issues: Client buffer proxies must survive until wait, and queued jobs do not yet retain server resources exactly like native Metal.
 
-MAR currently supports one commit and one wait per command buffer. Client buffer proxies must remain alive until the wait copies their results back. More importantly, a queued job currently looks up its server resources again when the scheduler submits it. If the client releases a buffer, pipeline, or queue after `commit()` but before submission, MAR fails the job safely. Native Metal retains resources needed by already committed work, so reproducing that behavior requires every queued `Job` to retain its resources until completion.
+These limitations are accepted MVP boundaries, not claims of production GPU virtualization. I will not be resolving anytime soon (or ever?).
 
-The prototype also has global handles with no per-client ownership checks, a small compute-only API surface, FIFO scheduling, and protobuf messages that copy entire buffers. These are accepted MVP boundaries, not claims of production GPU virtualization.
+Pitfalls faced:
+
+- gRPC runs handlers concurrently but that does not make the service object's maps, counters, or queues thread-safe. You have to manage those yourself.
+- One global lock can remove data races while accidentally serializing the entire server if it is held during a GPU wait. But this is a very brute-force approach that will make the system slow.
+- A condition-variable notification has no memory. A thread only recieves the notification if it is explicitly waiting for it, otherwise it gets missed.
+- Parallel programming is hard. It requires multi-threading, explicit ownership, job states, completion signaling, and cleanup.
+
+At the end of the day, API compatibility means preserving observable behavior. Under the hood we can do whatever we want tbh. The user doesn't care as long is it works correctly and works fast enough.
+
 
 ## Closing remarks
 
-What started as "just forward Metal calls over gRPC" turned into a project about dynamic dispatch, remote object identity, reconstructing transfers from unified memory, and concurrent command scheduling. The current result is not a faster Metal implementation. It is a working proof that a useful subset of `metal-cpp` can be turned into a network protocol without changing the application's Metal calls. Now that the plumbing works, the interesting next question is whether a smarter scheduler can use it to reduce real GPU idle time.
+What started as "hey this is an interesting company, how are they doing this?" turned into an awesome systems project about dynamic dispatch, remote object identity, reconstructing transfers from unified memory, and concurrent command scheduling. I'm glad I jumped in this rabbit hole and I learnt a lot.
+
+What I have right now is definitely not some production grade Metal API remoter. It is simply a working proof that a useful subset of `metal-cpp` can be turned into a network protocol without changing the application's Metal calls.
