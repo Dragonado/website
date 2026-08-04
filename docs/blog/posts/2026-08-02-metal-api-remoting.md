@@ -624,7 +624,7 @@ Some caveats of MAR that won't generalize to all metal programs:
 
 - Limited API coverage: MAR implements only the compute methods required by the demo, not the entire Metal API.
 - Buffer copies: Every commit and wait currently transfers each bound buffer in full, even if only a few bytes changed.
-- write-commit-wait-read pattern: The snapshot model supports this sequence but cannot reproduce every asynchronous shared-memory access pattern allowed by native Metal.
+- Snapshot coherence: The server only observes buffer contents at commit() and after waitUntilCompleted(). CPU writes made while GPU work is running cannot be reproduced correctly because the buffers are not in sync.
 - Object lifetime issues: Client buffer proxies must survive until wait, and queued jobs do not yet retain server resources exactly like native Metal.
 
 These limitations are accepted MVP boundaries, not claims of production GPU virtualization. I will not be resolving anytime soon (or ever?).
@@ -632,7 +632,7 @@ These limitations are accepted MVP boundaries, not claims of production GPU virt
 Pitfalls faced:
 
 - gRPC runs handlers concurrently but that does not make the service object's maps, counters, or queues thread-safe. You have to manage those yourself.
-- One global lock can remove data races while accidentally serializing the entire server if it is held during a GPU wait. But this is a very brute-force approach that will make the system slow.
+- One global lock can remove data races while accidentally serializing the entire server if it is held during a GPU wait. But this is a very brute-force approach that essentially acts single-threaded.
 - A condition-variable notification has no memory. A thread only recieves the notification if it is explicitly waiting for it, otherwise it gets missed.
 - Parallel programming is hard. It requires multi-threading, explicit ownership, job states, completion signaling, and cleanup.
 
