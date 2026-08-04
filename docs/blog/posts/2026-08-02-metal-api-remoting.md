@@ -127,7 +127,7 @@ Before remoting the above code, I knew this would be a much harder and different
 
 On first glance, the project seems like a nice idea. Just copy what TNR does but do it for metal-cpp. I can't seem to find anyone else in the world that has done this kind of thing either. Exciting to be the first to build it!
 
-However there are at least two reasons why no one has done this and why MAR is a much much harder to solve than TNR:
+However there are at least two reasons why no one has done this:
 
 1. Apple Metal has no easy interception point for each API call.
 2. Apple's Unified Memory architecture allows shared-memory writes that are invisible to the shim.
@@ -138,9 +138,9 @@ We have to intercept the client code at some point and forward their GPU calls t
 
 #### The problem
 
-TNR does this at the dynamic load layer. 
+TNR intercepts CUDA calls at the dynamic load layer. 
 
-They catch the symbols, that are generated after compilation, that calls the GPU and replace it with their. They can do this because CUDA literally publishes documentation about their [ABI table in their website](https://docs.nvidia.com/cuda/cuda-programming-guide/03-advanced/driver-api.html).
+They catch the CUDA references, that are generated after compilation, that calls the GPU and replace it with their own reference. They can do this because CUDA publishes documentation about their [ABI table in their website](https://docs.nvidia.com/cuda/cuda-programming-guide/03-advanced/driver-api.html).
 
 Unfortunately, I cannot do this becauase literally almost all the metal calls in cpp are just generic Objective-C object message sends that are resolved at runtime. So there is no 1:1 mapping of GPU function -> symbol for me to intercept and put my own symbol.
 
@@ -164,18 +164,18 @@ $ objdump -d client
 call   cuMemAlloc_v2@plt
 ```
 
-`U` means the function is undefined inside the client binary: the program expects the dynamic loader to find it in a shared library. Modern CUDA headers map the source-level `cuMemAlloc` call to the ABI-versioned `cuMemAlloc_v2` symbol. `cuMemAlloc_v2@plt` is the trampoline through which the final implementation is called. An `LD_PRELOAD` library can provide that same named symbol, so the loader resolves it to TNR's implementation first.
+`U` means the function is undefined inside the client binary: the program expects the dynamic loader to find it in a shared library. Modern CUDA headers map the source-level `cuMemAlloc` call to the ABI-versioned `cuMemAlloc_v2` symbol. The `@plt` is the jump stub through which the final implementation is called.
 
-Now at dynamic-load time, TNR can swap this symbol with a symbol that they generated themselves. In fact, Thunder described exactly this mechanism in its C++ Systems job posting: a userspace shim loaded through `LD_PRELOAD` intercepts CUDA calls and sends them over gRPC.
+Now at dynamic-load time, TNR can swap the implementation for this symbol with their own implementation. In fact, Thunder described exactly this mechanism in its C++ Systems job posting: a userspace shim loaded through `LD_PRELOAD` intercepts CUDA calls and sends them over gRPC.
 
 ![Thunder Compute job posting describing its userspace LD_PRELOAD CUDA shim and gRPC GPU server](../../assets/thunder-compute-ld-preload-job-posting-2026-08-02.png)
 
-*Archived screenshot of Thunder Compute's Software Engineer (C++ Systems) posting, captured August 2, 2026. [View the live posting](https://www.thundercompute.com/careers/role?id=2efae53b-817c-43e7-9da3-72694813f608).*
-
-This is the shim that they have for `cuMemAlloc` present in their `libthunder.so` file.
+This is the exported symbol that they have for `cuMemAlloc` present in their `libthunder.so` file.
 
 ```text
-cuMemAlloc_v2@@LIBTHUNDER
+/etc/ld.so.preload → /etc/thunder/libthunder.so
+undefined references → resolves to libthunder.so instead of libcuda.so 
+cuMemAlloc_v2 symbol -> cuMemAlloc_v2@@LIBTHUNDER instead of cuMemAlloc_v2@@libcuda.so.1
 ```
 
 My case is however far more complex.
@@ -221,20 +221,20 @@ Like how am I supposed to intercept this bruh?
 
 `setLength`, `newCommandQueue`, `commit`, and thousands of non-Metal Objective-C methods all map to the same `_objc_msgSend` symbol. The object in `x0` and selector in `x1` tell the Objective-C runtime which implementation to execute.
 
-At the dynamic-load layer, there is therefore no separate Metal symbol that I can replace for each method. Intercepting `_objc_msgSend` would catch messages from the entire process, not just Metal and I have to hand-write literall ALL overload even if I'm not using it.
+At the dynamic-load layer, there is therefore no separate Metal symbol that I can replace for each method. Intercepting `_objc_msgSend` would catch messages from the entire process, not just Metal.
 
 #### The fix
 
-That is why I substitute my own `MTL` (`MTLShim`) namespace while compiling the client instead lmao.
+That is why I substitute my own `MTL::` (`MetalShim::`) namespace while compiling the client instead lmao.
 
 No worry about runtime if I'm literally changing the code written by the user at compile time. The con? I'm changing the code written by the user.
 
-The user may expect their code to be compiled in a certain way but since I'm front-running their MTL:: userspace with my own MTLShim:: userspace, the compiled binary will obviously be different. This is also why unlike TNR, MAR can't work with just binaries, it needs the source code.
+The user may expect their code to be compiled in a certain way but since I'm front-running their MTL:: userspace with my own MetalShim:: userspace, the compiled binary will obviously be different. This is also why unlike TNR, MAR can't work with just binaries, it needs the source code.
 
 I literally have a file that is called [metal_hijack.h](https://github.com/Dragonado/metal-api-remoter/blob/main/metal/metal_hijack.h) that just consists of:
 
 ```cpp
-#define MTL MTLShim
+#define MTL MetalShim
 ```
 
 This is interception at compile time.
@@ -319,7 +319,7 @@ TODO: Rest of blog.
 
 <!-- ## 3. The compile-time `metal-cpp` header shim -->
 
-<!-- ### Turning `MTL::` into `MTLShim::` -->
+<!-- ### Turning `MTL::` into `MetalShim::` -->
 
 <!-- lorem ipsum -->
 
