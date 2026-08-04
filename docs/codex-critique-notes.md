@@ -13,12 +13,13 @@ This is a working checklist of review comments that remain unresolved in `docs/b
 
 - **`metal-cpp` is called a framework.** Apple describes it as a low-overhead C++ interface to Metal, distributed as headers. Calling it a C++ interface or header-only library is more technically precise than calling it an Apple framework.
 - **The shim does not hijack every Metal call.** It uses compile-time substitution for the supported `metal-cpp` surface. Calls outside the implemented shim are not transparently remoted.
-- **The novelty claim is still stronger than the evidence.** "I can't find an existing Metal remoter" is supportable; "Exciting to be the first" still asserts priority that has not been established.
+- **The pasted `metal_hijack.h` snippet has the wrong namespace.** The blog currently shows `#define MTL MTLShim`, but the real project contains `#define MTL MetalShim`.
 - **"Much much harder to solve than TNR" is too broad.** Metal introduces two specific complications for this prototype, but Thunder's production CUDA virtualization system also handles compatibility, networking, isolation, lifecycle management, scheduling, and failures. Compare the particular interception and memory-coherence problems instead of the overall difficulty of both systems.
 
 ## CUDA and Metal interception
 
-- **The dynamic-link-layer claim is now supported.** Thunder's current job posting explicitly says it uses a userspace shim loaded through `LD_PRELOAD` to intercept CUDA calls and send them over gRPC. This item no longer needs correction.
+- **The dynamic-link-layer claim is now supported both publicly and empirically.** Thunder's current job posting says it uses a userspace shim loaded through `LD_PRELOAD` to intercept CUDA calls and send them over gRPC. Inspection of a live TNR instance confirmed that `/etc/ld.so.preload` contains `/etc/thunder/libthunder.so`, causing the dynamic loader to inject Thunder's shim system-wide.
+- **The blog currently says Thunder swaps the symbol "at link time."** That is inaccurate. The application is linked with an unresolved dynamic CUDA symbol and a PLT entry; the Linux dynamic loader chooses Thunder's preloaded definition when the process starts. Say "at process load time" or "during dynamic symbol resolution."
 - **The PTX ABI link does not support the host-side interception explanation.** NVIDIA's PTX Writer's Guide documents the ABI for generated GPU device code. It is not a table of CUDA host-library symbols. The CUDA Driver API documentation is a better source for C entry points such as `cuMemAlloc` and `cuLaunchKernel`.
 - **CUDA symbols are not "generated after compilation."** Compilation emits references/imports; the linker and dynamic loader resolve those references to functions in a shared library. `LD_PRELOAD` changes which implementation is found first.
 - **"Apple don't have documentation for this" is inaccurate.** Apple documents Metal, `metal-cpp`, and the Objective-C runtime. The obstacle is that most Metal object methods are dispatched as Objective-C messages rather than exposed as one dynamic-library symbol per method.
@@ -31,6 +32,106 @@ Useful primary sources:
 - [NVIDIA CUDA Driver API guide](https://docs.nvidia.com/cuda/cuda-programming-guide/03-advanced/driver-api.html)
 - [NVIDIA PTX Writer's Guide](https://docs.nvidia.com/cuda/ptx-writers-guide-to-interoperability/index.html)
 - [Apple metal-cpp](https://developer.apple.com/metal/cpp/)
+
+### Empirical binary verification (August 2026)
+
+The CUDA and Metal interception comparison was verified against actual compiled binaries rather than inferred only from documentation. Do not include the temporary instance address, credentials, SSH-key paths, or API tokens in the blog.
+
+#### Native metal-cpp binary
+
+The native `adder` was built with:
+
+```bash
+bazel build //src:adder --//src:shim=false
+```
+
+Its undefined imports include:
+
+```text
+_objc_msgSend
+_sel_registerName
+```
+
+There is no `MTL::Buffer::contents()` or `_MTLBuffer_contents` callable symbol in the final binary. The inline metal-cpp wrapper has disappeared into the caller.
+
+The literal selector name is stored in `__TEXT,__cstring`:
+
+```text
+contents
+```
+
+metal-cpp registers that string through `_sel_registerName` and stores the resulting selector at:
+
+```text
+MTL::Private::Selector::s_kcontents
+```
+
+The disassembly inside `Adder::populate_random_float` then:
+
+1. loads `s_kcontents`;
+2. puts the `MTL::Buffer*` receiver in `x0`;
+3. puts the `contents` selector in `x1`; and
+4. calls the generic `_objc_msgSend` stub.
+
+This verifies the blog's central Metal claim: there is no per-method dynamic function symbol comparable to a CUDA entry point. It does **not** prove runtime interception is impossible; it proves that interposing one clean symbol per Metal method is unavailable.
+
+The blog was corrected to use `__TEXT,__cstring`, not `__objc_methname`, because that is what the actual metal-cpp binary emits.
+
+#### Live TNR CUDA binary
+
+A minimal CUDA Driver API probe was compiled on a live TNR RTX A6000 instance. It initialized CUDA, created a context, allocated and freed 4 KiB, destroyed the context, and exited successfully with status `0`.
+
+The source-level calls compiled into these undefined ELF symbols:
+
+```text
+U cuCtxCreate_v4
+U cuCtxDestroy_v2
+U cuDeviceGet
+U cuInit
+U cuMemAlloc_v2
+U cuMemFree_v2
+```
+
+This confirms that modern CUDA headers can map a source call such as `cuMemAlloc(...)` to an ABI-versioned symbol such as `cuMemAlloc_v2`.
+
+The actual allocation call used the Procedure Linkage Table:
+
+```asm
+call  cuMemAlloc_v2@plt
+```
+
+The instance's system preload file contained:
+
+```text
+/etc/thunder/libthunder.so
+```
+
+`libthunder.so` exported CUDA entry points under its `LIBTHUNDER` symbol version, including multiple ABI generations such as:
+
+```text
+cuCtxCreate
+cuCtxCreate_v2
+cuCtxCreate_v3
+cuCtxCreate_v4
+cuMemAlloc
+cuMemAlloc_v2
+```
+
+`LD_DEBUG=bindings` showed every probe call resolving to `/etc/thunder/libthunder.so`, including `cuInit`, `cuDeviceGet`, `cuCtxCreate_v4`, `cuMemAlloc_v2`, `cuMemFree_v2`, and `cuCtxDestroy_v2`. Although `libcuda.so.1` remained a declared dependency, Thunder's preloaded definitions won dynamic symbol resolution.
+
+The experimentally verified chain is therefore:
+
+```text
+source call: cuMemAlloc(...)
+    -> undefined ELF symbol: cuMemAlloc_v2
+    -> PLT entry: cuMemAlloc_v2@plt
+    -> Linux dynamic loader
+    -> /etc/ld.so.preload
+    -> /etc/thunder/libthunder.so::cuMemAlloc_v2
+    -> Thunder's remote GPU implementation
+```
+
+This is excellent primary evidence for the blog. It is stronger and more durable to describe the commands and observed output than to rely only on a screenshot of Thunder's job posting.
 
 ## Unified memory and data movement
 
@@ -58,7 +159,9 @@ Useful primary source:
 - Removed the unsupported implication that Thunder must be VC-subsidized or losing money.
 - Changed Thunder's transport wording from the public internet to a network.
 - Corrected the CPU-to-CPU typo to CPU-to-GPU.
-- Softened the claim that nobody else has built anything similar, although the remaining "first" wording still needs qualification.
+- Deliberately accepted the informal "Exciting to be the first" wording. It follows the author's qualifier that they could not find prior work, and the author accepts that the novelty claim is not independently verifiable.
 - Reworded the gRPC bullet so it no longer claims that the project has transport security merely because it uses gRPC.
 - Confirmed from Thunder's own current job posting that its CUDA interception uses a userspace `LD_PRELOAD` shim.
+- Confirmed on a live TNR instance that `/etc/ld.so.preload` injects `libthunder.so`, which wins runtime binding for ABI-versioned CUDA symbols such as `cuMemAlloc_v2`.
+- Archived the Thunder C++ Systems job-posting screenshot in `docs/assets` with a dated caption and retained the live source link, removing the blog's dependency on ImgBB.
 - Replaced both visible `[CHAT: ...]` requests with CUDA/Metal interception and memory-transfer examples.
