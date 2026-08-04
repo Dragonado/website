@@ -34,7 +34,9 @@ For example, if you pay for 100GB disk space on your serverless function and you
 
 What if happens if every single user decides to utilize 100% of their resources? Idk man what happens if everyone withdrew all their money from the bank? Civilization collapses or sumthing. Just have faith in the [LLN gods](https://en.wikipedia.org/wiki/Law_of_large_numbers) (not a typo) and pray this doesn't happen.
 
-I was very interested how ThuNdeRcompute (TNR) manages to oversubscribe their GPU. The way they do it so simple yet so smart. For most ML workloads, the GPU is idle a lot of the time. 
+I was very interested how ThuNdeRcompute (TNR) manages to oversubscribe their GPU. The way they do it so simple yet so smart.
+
+For many ML workloads, the process stops using/releases the GPU which leads to lot of GPU idle time. For example, if you paid for 1hr of GPU time and only used the GPU for 20 minutes then much of that GPU's capacity remains idle because its allocated solely to you.
 
 What if you could run that GPU on a different ML workload that someone else is waiting on? That would be nice but we can't do that since the GPU is literally attached to the CPU that the first user is doing. Oh, but then what if we detach the GPU and make it remote? That way could pool GPU jobs from different users and schedule them as we want. Perhaps connect the CPU and GPU via an network protocol? Yeah let's do this and call it GPU-over-TCP :absolute-cinema:
 
@@ -140,7 +142,7 @@ We have to intercept the client code at some point and forward their GPU calls t
 
 TNR intercepts CUDA calls at the dynamic load layer. 
 
-They catch the CUDA references, that are generated after compilation, that calls the GPU and replace it with their own reference. They can do this because CUDA publishes documentation about their [ABI table in their website](https://docs.nvidia.com/cuda/cuda-programming-guide/03-advanced/driver-api.html).
+They intercept the CUDA references, that are generated during compilation/linking, then make the dynamic loader resolve those references to their custom implementation. They can do this because CUDA has a clean 1:1 mapping of their CUDA functions to C symbols.
 
 Unfortunately, I cannot do this becauase literally almost all the metal calls in cpp are just generic Objective-C object message sends that are resolved at runtime. So there is no 1:1 mapping of GPU function -> symbol for me to intercept and put my own symbol.
 
@@ -170,12 +172,19 @@ Now at dynamic-load time, TNR can swap the implementation for this symbol with t
 
 ![Thunder Compute job posting describing its userspace LD_PRELOAD CUDA shim and gRPC GPU server](../../assets/thunder-compute-ld-preload-job-posting-2026-08-02.png)
 
-This is the exported symbol that they have for `cuMemAlloc` present in their `libthunder.so` file.
+Basically under the hood:
 
 ```text
-/etc/ld.so.preload → /etc/thunder/libthunder.so
-undefined references → resolves to libthunder.so instead of libcuda.so 
-cuMemAlloc_v2 symbol -> cuMemAlloc_v2@@LIBTHUNDER instead of cuMemAlloc_v2@@libcuda.so.1
+/etc/ld.so.preload -> /etc/thunder/libthunder.so
+
+client: U cuMemAlloc_v2
+client call: cuMemAlloc_v2@plt
+
+normal binding that's not chosen:
+  cuMemAlloc_v2 -> libcuda.so.1
+
+Thunder binding that's chosen because of preload:
+  cuMemAlloc_v2 -> /etc/thunder/libthunder.so
 ```
 
 My case is however far more complex.
@@ -207,7 +216,7 @@ $ otool -v -s __TEXT __cstring client | grep -A 1 -B 1 contents
 000000010001c46f  controlDependencies
 ```
 
-The undefined function is `_objc_msgSend`, not `_MTLBuffer_contents`. In this metal-cpp build, the word `contents` is stored as a C string and registered as a selector through `_sel_registerName`. At runtime the program passes both the `buffer` object and that selector to the one generic `_objc_msgSend` function.
+The undefined symbol is `_objc_msgSend`, not `_MTLBuffer_contents`. In this metal-cpp build, the word `contents` is stored as a C string and registered as a selector through `_sel_registerName`. At runtime the program passes both the `buffer` object and that selector to the one generic `_objc_msgSend` function.
 
 There is no `_MTLBuffer_contents` function symbol. `contents` is stored separately as an Objective-C selector. On an Apple Silicon Mac, the call is conceptually shaped like this in assembly:
 
@@ -229,7 +238,7 @@ That is why I substitute my own `MTL::` (`MetalShim::`) namespace while compilin
 
 No worry about runtime if I'm literally changing the code written by the user at compile time. The con? I'm changing the code written by the user.
 
-The user may expect their code to be compiled in a certain way but since I'm front-running their MTL:: userspace with my own MetalShim:: userspace, the compiled binary will obviously be different. This is also why unlike TNR, MAR can't work with just binaries, it needs the source code.
+The user may expect their code to be compiled in a certain way but since I'm replacing their MTL:: namespace with my own MetalShim:: namespace, the compiled binary will obviously be different. This is also why unlike TNR, MAR can't work with just binaries, it needs the source code.
 
 I literally have a file that is called [metal_hijack.h](https://github.com/Dragonado/metal-api-remoter/blob/main/metal/metal_hijack.h) that just consists of:
 
@@ -251,9 +260,9 @@ The nice consequence of this is that the programmer conceptually writes their pr
 
 Its slower for sure but conceptually both are the same.
 
-However, Apple has opted for the unified memory architecture. Which means the CPU and GPU share the same RAM and have nothing to transfer between the two. Synchronization is the burden of the programmer.
+However, Apple has opted for the unified memory architecture. UMA is a system where the CPU and GPU share a single common pool of physical RAM.
 
-The programmer would then assume that CPU/GPU can access the same memory and would expect every program of theirs to run in this model. However, I literally create a divide between CPU and GPU and need to transfer data between them. The CPU and GPU literally cannot share the same memory.
+This means the programmer does not need to request an explicit CPU-to-GPU copy. However, I literally create a divide between CPU and GPU and need to transfer data between them. The client CPU and server GPU literally cannot share the same memory because they are in different devices.
 
 This causes a lot of issues for correctness to be resolved.
 
