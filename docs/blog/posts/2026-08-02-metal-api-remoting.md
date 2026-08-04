@@ -36,7 +36,7 @@ What if happens if every single user decides to utilize 100% of their resources?
 
 I was very interested how ThuNdeRcompute (TNR) manages to oversubscribe their GPU. The way they do it so simple yet so smart.
 
-For many ML workloads, the process stops using/releases the GPU which leads to lot of GPU idle time. For example, if you paid for 1hr of GPU time and only used the GPU for 20 minutes then much of that GPU's capacity remains idle because its allocated solely to you.
+For many ML workloads, the process stops using the GPU which leads to lot of GPU idle time. For example, if you paid for 1hr of GPU time and only used the GPU for 20 minutes then much of that GPU's capacity remains idle because its allocated solely to you.
 
 What if you could run that GPU on a different ML workload that someone else is waiting on? That would be nice but we can't do that since the GPU is literally attached to the CPU that the first user is doing. Oh, but then what if we detach the GPU and make it remote? That way could pool GPU jobs from different users and schedule them as we want. Perhaps connect the CPU and GPU via an network protocol? Yeah let's do this and call it GPU-over-TCP :absolute-cinema:
 
@@ -168,9 +168,7 @@ call   cuMemAlloc_v2@plt
 
 `U` means the function is undefined inside the client binary: the program expects the dynamic loader to find it in a shared library. Modern CUDA headers map the source-level `cuMemAlloc` call to the ABI-versioned `cuMemAlloc_v2` symbol. The `@plt` is the jump stub through which the final implementation is called.
 
-Now at dynamic-load time, TNR can swap the implementation for this symbol with their own implementation. In fact, Thunder described exactly this mechanism in its C++ Systems job posting: a userspace shim loaded through `LD_PRELOAD` intercepts CUDA calls and sends them over gRPC.
-
-![Thunder Compute job posting describing its userspace LD_PRELOAD CUDA shim and gRPC GPU server](../../assets/thunder-compute-ld-preload-job-posting-2026-08-02.png)
+Now at dynamic-load time, TNR can swap the implementation for this symbol with their own implementation. In fact, [Thunder described exactly this mechanism](../../assets/thunder-compute-ld-preload-job-posting-2026-08-02.png): a userspace shim loaded through `LD_PRELOAD` intercepts CUDA calls and sends them over gRPC.
 
 Basically under the hood:
 
@@ -262,7 +260,7 @@ Its slower for sure but conceptually both are the same.
 
 However, Apple has opted for the unified memory architecture. UMA is a system where the CPU and GPU share a single common pool of physical RAM.
 
-This means the programmer does not need to request an explicit CPU-to-GPU copy. However, I literally create a divide between CPU and GPU and need to transfer data between them. The client CPU and server GPU literally cannot share the same memory because they are in different devices.
+This means the programmer does not need to request an explicit CPU-to-GPU copy. However, I literally create a divide between CPU and GPU and need to transfer data between them. The client CPU and server GPU literally cannot share the same memory because they are in different machines.
 
 This causes a lot of issues for correctness to be resolved.
 
@@ -295,243 +293,77 @@ But this requires the programmer to code in a certain way. They have to follow t
 
 I'm sure there are many ways to fix it but they are all complicated to implement. I'll take this con of enforcing write->commit->wait->read pattern and live with it for now.
 
-## What this project does and does not do
 
-What this project does not:
+<!-- ## Turning Metal objects into remote handles -->
 
-- 100% API coverage: For this Proof of Concept I could only write code that covers a small subset of Metal-cpp API methods.
-- Render: There is no rendering here whatsoever. That is much harder than compute because we have to take into consideration the window owned by the mac, frame rate, image compression, audio sync, and so many more harder problems.
+<!-- ### A pointer cannot cross machines -->
 
-TODO: Rest of blog.
+<!-- Lorem ipsum. -->
 
-<!-- lorem ipsum -->
+<!-- ### Rebuilding Metal's object graph with IDs -->
 
-<!-- ### The basic client/server goal -->
+<!-- Lorem ipsum. -->
 
+<!-- ### Remote object lifetimes -->
 
+<!-- Lorem ipsum. -->
 
-<!-- lorem ipsum -->
+<!-- ## Which calls cross the network? -->
 
-<!-- ## 2. Why Metal is harder to intercept than CUDA -->
+<!-- ### Creation and server-state queries -->
 
-<!-- ### CUDA's C ABI and dynamic-linker boundary -->
+<!-- Lorem ipsum. -->
 
-<!-- lorem ipsum -->
+<!-- ### Recording commands locally -->
 
-<!-- ### Metal's Objective-C message dispatch -->
+<!-- Lorem ipsum. -->
 
-<!-- lorem ipsum -->
+<!-- ### The RPC boundaries: create, commit, wait, and release -->
 
-<!-- ### Why precompiled Metal binaries are outside the MVP -->
+<!-- Lorem ipsum. -->
 
-<!-- lorem ipsum -->
+<!-- ## `commit()` and `waitUntilCompleted()` -->
 
-<!-- ## 3. The compile-time `metal-cpp` header shim -->
+<!-- ### Sending command metadata and input bytes at commit -->
 
-<!-- ### Turning `MTL::` into `MetalShim::` -->
+<!-- Lorem ipsum. -->
 
-<!-- lorem ipsum -->
+<!-- ### Executing the real Metal command buffer on the server -->
 
-<!-- ### What the compiler emits after substitution -->
+<!-- Lorem ipsum. -->
 
-<!-- lorem ipsum -->
+<!-- ### Copying completed results back into shadow buffers -->
 
-<!-- ### Source compatibility versus binary transparency -->
+<!-- Lorem ipsum. -->
 
-<!-- lorem ipsum -->
+<!-- ## gRPC concurrency and the asynchronous scheduler -->
 
-<!-- ## 4. Turning Metal's object graph into remote handles -->
+<!-- ### Concurrent RPC handlers and shared server state -->
 
-<!-- ### Devices, queues, libraries, functions, and pipelines -->
-
-<!-- lorem ipsum -->
-
-<!-- ### Why object creation is synchronous RPC -->
-
-<!-- lorem ipsum -->
-
-<!-- ### `NS::String*` is data, not a remote GPU object -->
-
-<!-- lorem ipsum -->
-
-<!-- ## 5. Create, record, commit, and wait -->
-
-<!-- ### Creation calls cross the network -->
-
-<!-- lorem ipsum -->
-
-<!-- ### Recording calls stay local -->
-
-<!-- lorem ipsum -->
-
-<!-- ### `commit()` is the serialization boundary -->
-
-<!-- lorem ipsum -->
-
-<!-- ### `waitUntilCompleted()` is the completion boundary -->
-
-<!-- lorem ipsum -->
-
-<!-- ## 6. The pointer problem: shadow buffers and coherence -->
-
-<!-- ### Why `Buffer::contents()` cannot send a pointer over the network -->
-
-<!-- lorem ipsum -->
-
-<!-- ### Client-side shadow allocations -->
-
-<!-- lorem ipsum -->
-
-<!-- ### Copying inputs at commit -->
-
-<!-- lorem ipsum -->
-
-<!-- ### Copying outputs after completion -->
-
-<!-- lorem ipsum -->
-
-<!-- ### The unsupported mid-flight CPU/GPU access pattern -->
-
-<!-- lorem ipsum -->
-
-<!-- ## 7. The protobuf protocol -->
-
-<!-- ### Handles and create/release RPCs -->
-
-<!-- lorem ipsum -->
-
-<!-- ### Encoding a command buffer as metadata and bytes -->
-
-<!-- lorem ipsum -->
-
-<!-- ### How protobuf frames repeated fields and `bytes` -->
-
-<!-- lorem ipsum -->
-
-<!-- ## 8. gRPC is parallel: protecting shared server state -->
+<!-- Lorem ipsum. -->
 
 <!-- ### The 100-client race-condition experiment -->
 
-<!-- lorem ipsum -->
+<!-- Lorem ipsum. -->
 
-<!-- ### What the mutex actually protects -->
+<!-- ### Enqueuing jobs for a scheduler thread -->
 
-<!-- lorem ipsum -->
+<!-- Lorem ipsum. -->
 
-<!-- ### Why one global mutex is acceptable for the MVP -->
+<!-- ### Queue ordering without GPU preemption -->
 
-<!-- lorem ipsum -->
+<!-- Lorem ipsum. -->
 
-<!-- ### Why the mutex must not cover GPU waits -->
+<!-- ## Working demo -->
 
-<!-- lorem ipsum -->
+<!-- ### One source program, native or remote -->
 
-<!-- ## 9. The asynchronous command-buffer scheduler -->
+<!-- Lorem ipsum. -->
 
-<!-- ### RPC handlers enqueue jobs -->
+<!-- ### Correct remote execution and concurrent clients -->
 
-<!-- lorem ipsum -->
+<!-- Lorem ipsum. -->
 
-<!-- ### One scheduler thread submits to Metal -->
+<!-- ### What the demo proves and what it does not -->
 
-<!-- lorem ipsum -->
-
-<!-- ### FIFO ordering and same-queue dependencies -->
-
-<!-- lorem ipsum -->
-
-<!-- ### Admission order is not GPU preemption -->
-
-<!-- lorem ipsum -->
-
-<!-- ## 10. Resource lifetime across the network boundary -->
-
-<!-- ### Why native Metal retains resources after commit -->
-
-<!-- lorem ipsum -->
-
-<!-- ### The current release-before-wait limitation -->
-
-<!-- lorem ipsum -->
-
-<!-- ### What `PendingJob` must eventually own -->
-
-<!-- lorem ipsum -->
-
-<!-- ## 11. What the working demo proves -->
-
-<!-- ### A vector-add program with the same client source -->
-
-<!-- lorem ipsum -->
-
-<!-- ### Remote execution and result verification -->
-
-<!-- lorem ipsum -->
-
-<!-- ### Concurrent clients sharing one server and GPU -->
-
-<!-- lorem ipsum -->
-
-<!-- ### What has not been measured -->
-
-<!-- lorem ipsum -->
-
-<!-- ## 12. Thunder Compute and TNR: two different tradeoffs -->
-
-<!-- ### Thunder's exclusive GPU-lease model -->
-
-<!-- lorem ipsum -->
-
-<!-- ### This project's command-buffer multiplexing model -->
-
-<!-- lorem ipsum -->
-
-<!-- ### VRAM, fairness, isolation, and predictability -->
-
-<!-- lorem ipsum -->
-
-<!-- ### Why neither design dominates the other -->
-
-<!-- lorem ipsum -->
-
-<!-- ## 13. The semantic contract -->
-
-<!-- ### Preserving Metal meaning, not Metal timing -->
-
-<!-- lorem ipsum -->
-
-<!-- ### The supported-shim boundary -->
-
-<!-- lorem ipsum -->
-
-<!-- ### Honest claims about valid programs and dishonest clients -->
-
-<!-- lorem ipsum -->
-
-<!-- ## 14. What remains -->
-
-<!-- ### Native-compatible resource lifetime -->
-
-<!-- lorem ipsum -->
-
-<!-- ### Broader Metal storage and synchronization modes -->
-
-<!-- lorem ipsum -->
-
-<!-- ### Session isolation and security -->
-
-<!-- lorem ipsum -->
-
-<!-- ### Scheduler instrumentation and utilization experiments -->
-
-<!-- lorem ipsum -->
-
-<!-- ## 15. Closing perspective -->
-
-<!-- ### A working remoter before a production virtual GPU -->
-
-<!-- lorem ipsum -->
-
-<!-- ### The next experiment -->
-
-<!-- lorem ipsum -->
+<!-- Lorem ipsum. -->

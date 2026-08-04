@@ -2,6 +2,54 @@
 
 This is a working checklist of review comments that remain unresolved in `docs/blog/posts/2026-08-02-metal-api-remoting.md`. It is not intended to dictate the blog's voice. Delete each item when the corresponding text is fixed or deliberately accepted.
 
+## Remaining blog plan and length cap
+
+The published draft is already approximately an 11-minute read. Cap the finished post at approximately 20 minutes by adding no more than roughly 1,500–1,800 words. The remaining narrative should contain only these sections:
+
+1. **Turning Metal objects into remote handles**
+   - Explain why pointers cannot cross machines.
+   - Show how client proxy objects carry IDs that identify real server-side Metal objects.
+   - Briefly cover the `Device` → queue/buffer/library → function/pipeline object graph and remote lifetimes.
+
+2. **Which calls cross the network?**
+   - Creation and server-state queries use synchronous RPCs.
+   - Encoder recording stays local.
+   - `commit()` sends the recorded job.
+   - `waitUntilCompleted()` waits and receives results.
+   - `release()` releases the remote handle.
+   - Show only an abbreviated protobuf request; do not add a protobuf wire-format tutorial.
+
+3. **`commit()` and `waitUntilCompleted()`**
+   - Connect the shadow-buffer solution to its implementation.
+   - At commit, send command metadata, bindings, and input bytes.
+   - At wait, receive output bytes and copy them into the client shadow buffers.
+
+4. **gRPC concurrency and the asynchronous scheduler**
+   - Explain that gRPC runs handlers concurrently but does not make shared service state thread-safe.
+   - Include the experiment where 3 of 100 adders failed without locking and all succeeded with locking.
+   - Explain that `commit()` enqueues a job and a scheduler thread submits jobs to Metal.
+   - Preserve submission order for command buffers from the same queue.
+   - State that MAR controls admission order, not GPU preemption.
+   - Do not turn this into a general C++ threading tutorial.
+
+5. **Working demo**
+   - Show that the same vector-add source can compile against native `metal-cpp` or MAR.
+   - Show remote execution, copied-back results, verification, and concurrent clients.
+   - Claim correctness and concurrent remote submission only.
+   - Do not claim an utilization improvement or performance win that has not been measured.
+
+The intended remaining flow is:
+
+```text
+remote object handles
+    -> RPC versus local recording
+    -> commit/wait data movement
+    -> concurrent handlers and asynchronous scheduling
+    -> working demo and honest claims
+```
+
+To stay within the length cap, omit dedicated sections about `NS::String`, protobuf wire encoding, every individual RPC, reference-count memory ordering, general multithreading concepts, rendering/audio architecture, adversarial security design, and an exhaustive TODO list. Do not add a separate MAR-versus-Thunder comparison section.
+
 ## Thunder Compute and oversubscription
 
 - **"For most ML workloads, the GPU is idle a lot of the time" is too broad.** Sustained training and some inference services can keep a GPU busy. A safer claim is that many long-lived GPU allocations contain idle periods or are underutilized across time.
