@@ -10,7 +10,7 @@ I've said this before and I'll say it again. Compared to my experience in corpor
 
 <!-- more -->
 
-Anyways, One of my friends introduced me to a very interesting startup from Georgia Tech (#GoJackets! :bee:) called [ThunderCompute](https://www.thundercompute.com). They are riding the AI wave and are selling cheap GPU compute. Possibly the cheapest I have ever found so far (?!). The closest I have seen are spot instances given by AWS/GCP/Azure but those are quite risky to run ML workloads since they can be terminated at the providers will. 
+Anyways, One of my friends introduced me to a very interesting startup from Georgia Tech (#GoJackets! :bee:) called [ThunderCompute](https://www.thundercompute.com). They are riding the AI wave and are selling cheap GPU compute. Possibly the cheapest I have ever found so far (?!). The closest I have seen are spot instances given by AWS/GCP/Azure but those are quite risky to run ML workloads since they can be terminated at the provider's will. 
 
 I was very curious as to how they could possibly offer such low GPU prices with these features:
 
@@ -22,7 +22,7 @@ How could they be offering a price cheaper than the big cloud players? What are 
 
 The simple answer is: Oversubscription :stars:
 
-Fascinated by all this, I decided to make my own GPU-over-TCP but since I'm constrained to my dusty 6-year old Macbook air with M1 chip with a single GPU, I have to make several changes to what TNR does.
+Fascinated by all this, I decided to make my own GPU-over-TCP but since I'm constrained to my dusty 6-year old MacBook Air with M1 chip with a single GPU, I have to make several changes to what TNR does.
 
 ## Oversubscription
 
@@ -36,9 +36,9 @@ What if happens if every single user decides to utilize 100% of their resources?
 
 I was very interested how ThuNdeRcompute (TNR) manages to oversubscribe their GPU. The way they do it so simple yet so smart.
 
-For many ML workloads, the process stops using the GPU which leads to lot of GPU idle time. For example, if you paid for 1hr of GPU time and only used the GPU for 20 minutes then much of that GPU's capacity remains idle because its allocated solely to you.
+For many ML workloads, the process stops using the GPU which leads to lot of GPU idle time. For example, if you paid for 1hr of GPU time and only used the GPU for 20 minutes then much of that GPU's capacity remains idle because it's allocated solely to you.
 
-What if you could run that GPU on a different ML workload that someone else is waiting on? That would be nice but we can't do that since the GPU is literally attached to the CPU that the first user is doing. Oh, but then what if we detach the GPU and make it remote? That way could pool GPU jobs from different users and schedule them as we want. Perhaps connect the CPU and GPU via an network protocol? Yeah let's do this and call it GPU-over-TCP :absolute-cinema:
+What if you could run that GPU on a different ML workload that someone else is waiting on? That would be nice but we can't do that since the GPU is literally attached to the CPU that the first user is doing. Oh, but then what if we detach the GPU and make it remote? That way could pool GPU jobs from different users and schedule them as we want. Perhaps connect the CPU and GPU via a network protocol? Yeah let's do this and call it GPU-over-TCP :absolute-cinema:
 
 So basically, they intercept your code's GPU CUDA calls, forward them over the network via TCP to a real GPU, compute it there, give back the result via TCP again. Sounds simple but insanely hard to achieve. But once you are able to do it, you can oversubscribe your GPUs and make compute cheap and everyone wins!
 
@@ -70,7 +70,7 @@ The software setup:
 - [gRPC](https://grpc.io) for networking: Every time I have to pass data via the network, I thank Google for creating gRPC. It handles so much of the RPC plumbing and provides built-in support for serialization, concurrent requests, retries, and its obviously designed to scale.
 - [Protocol buffer](https://protobuf.dev) for serialization.
 - [Bazel](https://bazel.build) for the build system. Pairs nicely with gRPC and protobuf.
-- Shim header: This is 50% of MAR that silently adds a piece code to the user's code that will hijack all their metal calls and convert them to network calls.
+- Shim header: This is 50% of MAR that silently adds a piece code to the user's code that will hijack a subset of metal-cpp calls and convert them to network calls.
 - Server code: This is the other 50% of MAR that receives GPU requests via the network and is supposed to schedule, compute and return the result.
 
 ## Sample Metal code
@@ -146,9 +146,9 @@ TNR intercepts CUDA calls at the dynamic load layer.
 
 They intercept the CUDA references, that are generated during compilation/linking, then make the dynamic loader resolve those references to their custom implementation. They can do this because CUDA has a clean 1:1 mapping of their CUDA functions to C symbols.
 
-Unfortunately, I cannot do this becauase literally almost all the metal calls in cpp are just generic Objective-C object message sends that are resolved at runtime. So there is no 1:1 mapping of GPU function -> symbol for me to intercept and put my own symbol.
+Unfortunately, I cannot do this because literally almost all the metal calls in cpp are just generic Objective-C object message sends that are resolved at runtime. So there is no 1:1 mapping of GPU function -> symbol for me to intercept and put my own symbol.
 
-It would be extremely laborous and fragile to intercept the generic objective-C call that is resolved at runtime.
+It would be extremely laborious and fragile to intercept the generic objective-C call that is resolved at runtime.
 
 Here is the concrete difference. A CUDA Driver API call looks like this:
 
@@ -187,7 +187,7 @@ Thunder binding that's chosen because of preload:
   cuMemAlloc_v2 -> /etc/thunder/libthunder.so
 ```
 
-My case is however far more complex.
+ABI interception for me is however far more complex.
 
 A typical `metal-cpp` object call instead looks like this:
 
@@ -250,13 +250,13 @@ This is interception at compile time.
 
 ### 2. Unified Memory
 
-In convential discrete Nvidia GPUs, there is a clear divide between CPU and GPU. In fact, GPUs have their own RAM/cache/memory and stuff. The way the CPU sends data to the GPU is via the PCI Express bus or NVLink that is actually very fast with high throughput.
+In conventional discrete NVIDIA GPUs, there is a clear divide between CPU and GPU. In fact, GPUs have their own RAM/cache/memory and stuff. The way the CPU sends data to the GPU is via the PCI Express bus or NVLink that is actually very fast with high throughput.
 
 The `cudaMemcpy` that you usually see in CUDA programs, tell the driver to load and unload data from GPU via some hardware path.
 
 #### The problem
 
-The nice consequence of this is that the programmer conceptually writes their program thinking that CPU and GPU are different entities that need to share data. TNR takes advantage of this model and the only difference (from client POV) is that instead of the hardware path, the data travels via TCP instead.
+The nice consequence of this is that the programmer conceptually writes their program thinking that CPU and GPU are different entities that need to share data. TNR takes advantage of this model and the difference (from client POV) is that instead of the hardware path, the data travels via TCP instead.
 
 Its slower for sure but conceptually both are the same.
 
@@ -313,10 +313,10 @@ So whenver the client then calls a function with the `device` pointer, two thing
 1. The function uses the locally stored metadata sent by the server. For example, `device->DeviceName()` is just a string that is stored in the clients memory when the device was first minted by the server.
 2. The function makes a network call to the server. For example, `device->newCommandQueue()` needs a new command queue to be minted. So the function calls the server, but then how does the server know which device handle to use? It has many. Thats where the `device_id` comes in handy. The client has identifed that "hey the device handle that is mapped to `device_id` is what you have to use".
 
-Here is the "hijacked" `Device` class that the client recieves:
+Here is the "hijacked" `Device` class that the client receives:
 
 ```cpp
-namespace MTLShim {
+namespace MetalShim {
 class Device {
   public:
     Device(uint32_t device_id, NS::String *device_name) : device_id_(device_id), device_name_(device_name) {
@@ -374,7 +374,7 @@ But we have many Metal objects, not just `Device`. We have objects for command q
 
 All of them need to be minted by the server and then linked by an ID.
 
-The heirarchy looks something like:
+The hierarchy looks something like:
 
 ```text
 Device ID
@@ -416,7 +416,7 @@ At `commit()`, the client sends the command-queue ID, pipeline-state ID, grid si
 
 ### Executing the real Metal command buffer on the server
 
-The serves does this directly inside the `CommitCommandBuffer` RPC. It looks up the real queue, pipeline, and buffers, creats a native Metal command buffer and compute encoder, copies the packed input bytes into the real buffers, restors every buffer binding, and calls the real `dispatchThreads()` and `commit()`.
+The server does this directly inside the `CommitCommandBuffer` RPC. It looks up the real queue, pipeline, and buffers, creates a native Metal command buffer and compute encoder, copies the packed input bytes into the real buffers, restores every buffer binding, and calls the real `dispatchThreads()` and `commit()`.
 
 It then stores the native command-buffer pointer in `command_buffer_map_` under a new ID and returned that ID to the client. There is no job state machine, scheduler thread, or completion callback yet. The RPC simply submitted the work to Metal and returned. The future section will have why it's necessary to have these things when scaling.
 
@@ -426,11 +426,11 @@ It then stores the native command-buffer pointer in `command_buffer_map_` under 
 
 The server then concatenates the contents of the real buffers into the response. The client splits those bytes using the known buffer lengths and copies them into its shadow buffers. From the original program's point of view, the same pointers returned by `Buffer::contents()` now contained the GPU's results.
 
-So after `waitUntilCompleted()` the client buffers and server buffers are in sync!
+So after `waitUntilCompleted()` the involved client buffers and server buffers are in sync!
 
 ### Protocol Buffer definitions
 
-gRPC uses protobuf as its serialization format. So the below is my definition of (request, response, rpc) triplet that is needed for every API.
+gRPC uses protobuf as its serialization format. So the below is my definition of (request, response, rpc) triplet that is needed for every remoted operation.
 
 ```proto
 syntax = "proto3";
@@ -483,7 +483,7 @@ Great success!
 
 ### But does it scale? Hell Nah
 
-One small problem tho: My code literally cannot handle more than 1 client at a time (which sort of defeats the purpose of this whole project innit?)
+One small problem tho: My code literally cannot reliably handle more than 1 client at a time (which sort of defeats the purpose of this whole project innit?)
 
 This implementation has two obvious multi-client problems.
 
@@ -528,7 +528,7 @@ We of course need to add mutex and server_shutdown for our server.
     std::deque<std::shared_ptr<Job>> ready_jobs_;
     std::map<uint32_t, std::shared_ptr<Job>> job_map_;
 
-    // This is the main thread that waits to recieve jobs and schedules them to Metal according to its algo.
+    // This is a dedicated thread whose only purpose is to recieve jobs and schedules them to the GPU according to its scheduling algo.
     std::thread scheduler_thread_;
 
     // A way to communicate with all threads that server needs to shutdown.
@@ -544,7 +544,7 @@ We of course need to add mutex and server_shutdown for our server.
 };
 ```
 
-Of course this just the setup. Every RPC now needs to be modified to write race-free code using the mutex and conditional variables.
+Of course this just the setup. Every RPC touching shared state now needs to be modified to write race-free code using the mutex and condition variables.
 
 Most of them are boring changes but the scheduler thread is most interesting to me. Here it is:
 
@@ -574,7 +574,7 @@ void scheduler_loop() {
 
 Now we have a new problem to solve. Suppose the scheduler has `N` jobs in its queue. Which one does it choose to dispatch to the GPU?
 
-You can have infinite complexity here and optimise for many things like time, cost, efficiency, etc,. However there is an invariant that all scheduling algorithms must follow to maintain correctneess!
+You can have infinite complexity here and optimise for many things like time, cost, efficiency, etc,. However there is an invariant that all scheduling algorithms must follow to maintain correctness!
 
 The ordering invariant is simple: suppose the client commits command buffer `c1` before `c2`. If both came from the same command queue, the server must submit `c1` before `c2`. Jobs from different queues have no ordering dependency.
 
@@ -596,11 +596,11 @@ c2->commit();
 
 Clearly c1 must run before c2 or else the `output` will be `5` instead of `42`.
 
-The simplest algo that statisfies this constraint is First-In-First-Out (FIFO) lol.
+The simplest algo that satisfies this constraint is First-In-First-Out (FIFO) lol.
 
 ### The 100-client race-condition experiment
 
-Writing a race-free multithreaded program for a big project like this is obviosuly challenging. My first attempt was riddled with bugs. I asked Codex to make a script that spawns 100 invocations of my adder program at the same time. I won't describe them here in detail but this one script helped me find so many race conditions in my program.
+Writing a race-free multithreaded program for a big project like this is obviously challenging. My first attempt was riddled with bugs. I asked Codex to make a script that spawns 100 invocations of my adder program at the same time. I won't describe them here in detail but this one script helped me find so many race conditions in my program.
 
 Most notable:
 
