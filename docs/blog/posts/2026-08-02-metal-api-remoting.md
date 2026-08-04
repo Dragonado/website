@@ -387,56 +387,78 @@ Device ID
 
 ### Creation and server-state queries
 
-<!-- Lorem ipsum. -->
+Any method that creates a real Metal object has to cross the network immediately. For example, `device->newCommandQueue()` sends the `device_id` to the server, which looks up the real device, creates a real `MTL::CommandQueue`, stores it, and returns a new `command_queue_id`. The client cannot continue until it gets that ID, so creation RPCs have to be blocking synchronous network calls.
+
+Queries are different. Stable properties such as `device->name()` and a pipeline's maximum thread count are returned when the object is created and cached in the client proxy. Querying them later is then just a local function call. State that cannot be cached would still need an RPC.
 
 ### Recording commands locally
 
-<!-- Lorem ipsum. -->
+Most compute-encoder calls do not need an immediate answer from the GPU. Calls such as `setComputePipelineState`, `setBuffer`, and `dispatchThreads` only describe work that will happen in the future. MAR therefore records the pipeline ID, buffer IDs, offsets, argument indices, and dispatch sizes inside the local encoder proxy.
+
+Sending one RPC for every encoder call would be insanely chatty. Recording locally lets the client build the whole command and ship it in one request at `commit()`.
 
 ### client -> server flow
 
-[CHAT: Add a table telling which methods were remoted, which were stored locally, which were async nonblocking calls and which were sync blocking]
+The rule ended up looking like this:
 
-<!-- Lorem ipsum. -->
+| Method type | Client behavior | Network behavior |
+| --- | --- | --- |
+| Create device, queue, buffer, library, function, or pipeline | Call server and construct a proxy from the returned ID | Synchronous RPC |
+| Read cached metadata | Return the value stored in the proxy | No RPC |
+| Record encoder state | Store IDs and dispatch metadata locally | No RPC |
+| `commit()` | Send the complete recorded command and buffer snapshots | Synchronous RPC, but does not wait for the GPU |
+| `waitUntilCompleted()` | Wait and copy completed bytes into client buffers | Synchronous blocking RPC |
+| `release()` | Delete the corresponding server handle | Synchronous RPC |
+
+At `commit()`, the client sends the command-queue ID, pipeline-state ID, grid sizes, buffer IDs, offsets, shader argument indices, and all bound buffer bytes. The server returns a newly minted `command_buffer_id`. That ID represents this particular submitted job.
 
 ### Executing the real Metal command buffer on the server
 
-<!-- Lorem ipsum. -->
+The server validates those IDs and places a copy of the request into a `Job`. When the scheduler selects it, the server looks up the real queue, pipeline, and buffers, creates a native Metal command buffer and compute encoder, copies the packed input bytes into the real buffers, restores every buffer binding, and calls the real `dispatchThreads()` and `commit()`.
+
+Metal executes the job asynchronously.
 
 ### Server -> client flow
 
-<!-- Lorem ipsum. -->
+`waitUntilCompleted()` sends the `command_buffer_id` back to the server. If the job is still queued or running, that RPC waits on the job's completion condition. Importantly, it sleeps without holding the global mutex, so other RPCs can continue using the server.
+
+After Metal reports completion, the server concatenates the contents of the real buffers into the response. The client splits those bytes using the known buffer lengths and copies them into its shadow buffers. From the original program's point of view, the same pointers returned by `Buffer::contents()` now contain the GPU's results.
 
 ## Initil working example!
 
+At this point the original vector-adder ran end to end through MAR: the client created proxy objects, recorded the command locally, sent it through gRPC, executed it using real Metal on the server, copied the result back, and passed the same correctness check as the native program. Huge W. Unfortunately, one successful client says nothing about multiple clients.
+
 ### But does it scale? No
 
-[CHAT: Insert obvious problem of why we cant do multiple calls at the same time which segways into concurrency]
+The first implementation had two obvious multi-client problems. Without synchronization, concurrent RPC handlers could race while incrementing `counter_` or reading and writing the handle maps. Putting one giant lock around every handler prevents those races, but holding that lock while waiting for the GPU serializes the clients: client B cannot even enqueue ready work while client A is blocked in `waitUntilCompleted()`.
 
-[Two problems right? race conditions and blocking GPU iirc]
+I needed short locks for shared bookkeeping and a separate asynchronous path for GPU submission.
 
 ## gRPC concurrency and the asynchronous scheduler
 
-[CHAT: insert how grpc is inherently concurrent but the state variables that we create arent! and hence we need to make our code also async to ahndle multiple calls]
+gRPC already invokes service methods concurrently. That does not make my `counter_`, maps, job queue, or job states thread-safe. MAR must synchronize that shared state itself, while making sure a thread waiting for one GPU job does not block unrelated RPC handlers.
 
 ### Concurrent RPC handlers and shared server state
 
-<!-- Lorem ipsum. -->
+Every access to the shared handle maps, counter, and job queue follows the same mutex protocol. A waiting RPC uses a condition variable, which releases the mutex while sleeping and reacquires it only when checking the completed state. The current MVP still performs some validation and input copying under the global lock, but it no longer holds that lock while waiting for the GPU to finish.
+
+The mutex does not protect the maps by magic. It works only because every thread that reads or writes those maps uses the same mutex.
 
 ### The 100-client race-condition experiment
 
-<!-- Lorem ipsum. -->
+I tested whether the locks were actually necessary by commenting them out and launching 100 adder processes concurrently. Three failed. Two clients were even assigned the same supposedly unique buffer ID because `counter_++` is a read-modify-write operation, not one indivisible action. Concurrent access to `std::map` was also a C++ data race, so later lookups could fail or the map could be corrupted.
+
+After restoring the lock guards, all 100 clients completed and verified their results. gRPC provides concurrent RPC dispatch; the application still owns the thread safety of the service object behind those RPCs.
 
 TODO for me: add screenshot of script.
 
 ### Enqueuing jobs for a scheduler thread
 
-[CHAT: now that we have multiple calls, we need to decide the order in which to execute. We need to maintain our invariant of "   // Suppose there are two jobs (q1, c1) and (q2, c2). Where q = command queue and c = command buffer and c1 was commited before c2 by the client.
-    // Then the ONLY schedule ordering invariant the server must hold is: if q1 == q2 then c1 commits before c2."]
+`commit()` now validates the request, creates a job, appends it to `ready_jobs_`, returns its ID, and wakes one dedicated scheduler thread. The scheduler currently pops jobs in FIFO order and submits them to Metal.
 
-    the simplest solution is FIFO which we do but it can easily be reconfigured to somethning else.
+The ordering invariant is simple: suppose the client commits command buffer `c1` before `c2`. If both came from the same command queue, the server must submit `c1` before `c2`. Jobs from different queues have no ordering dependency. FIFO is stronger than required because it orders everything, but it is an easy correct starting policy and can later be replaced with something smarter.
 
-<!-- Lorem ipsum. -->
+The scheduler chooses which command buffer to submit next. It cannot pause a long command buffer halfway through and run another one; after submission, Metal's driver controls execution on the GPU.
 
 ## Final Working demo
 
@@ -444,9 +466,16 @@ TODO for me: add ss.
 
 ### What the demo proves and what it does not
 
-<!-- Lorem ipsum. -->
+The demo proves that the same supported vector-add source can run against native `metal-cpp` or be recompiled against MAR, execute through the network boundary, and produce the correct result. It also proves that 100 independent client processes can concurrently reach one server and be admitted through a thread-safe FIFO path.
+
+It does **not** prove a performance win, better GPU utilization, production isolation, complete Metal compatibility, or a clever scheduling policy. The current FIFO scheduler is plumbing that makes the next experiment possible; metadata-aware gap filling and its measurement are future work.
 
 ## Caveats, pitfalls and short comings
-<!-- Caveat to mention here: remote object and queued-resource lifetimes do not yet fully reproduce native Metal behavior. -->
+
+MAR currently supports one commit and one wait per command buffer. Client buffer proxies must remain alive until the wait copies their results back. More importantly, a queued job currently looks up its server resources again when the scheduler submits it. If the client releases a buffer, pipeline, or queue after `commit()` but before submission, MAR fails the job safely. Native Metal retains resources needed by already committed work, so reproducing that behavior requires every queued `Job` to retain its resources until completion.
+
+The prototype also has global handles with no per-client ownership checks, a small compute-only API surface, FIFO scheduling, and protobuf messages that copy entire buffers. These are accepted MVP boundaries, not claims of production GPU virtualization.
 
 ## Closing remarks
+
+What started as "just forward Metal calls over gRPC" turned into a project about dynamic dispatch, remote object identity, reconstructing transfers from unified memory, and concurrent command scheduling. The current result is not a faster Metal implementation. It is a working proof that a useful subset of `metal-cpp` can be turned into a network protocol without changing the application's Metal calls. Now that the plumbing works, the interesting next question is whether a smarter scheduler can use it to reduce real GPU idle time.
