@@ -648,3 +648,5 @@ At the end of the day, API compatibility means preserving observable behavior. U
 What started as "hey this is an interesting company, how are they doing this?" turned into an awesome systems project about dynamic dispatch, remote object identity, reconstructing transfers from unified memory, and concurrent command scheduling. I'm glad I jumped in this rabbit hole and I learnt a lot.
 
 What I have right now is definitely not some production-grade Metal API remoter. It is simply a working proof that a useful subset of `metal-cpp` can be turned into a network protocol without changing the application's Metal source.
+
+![Metal API Remoter scheduler timeline showing per-job time split between waiting in MAR, GPU compute, and result copyback](../../assets/metal-api-remoter-scheduler-timeline.png)
