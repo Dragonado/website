@@ -10,7 +10,7 @@ I've said this before and I'll say it again. Compared to my experience in corpor
 
 <!-- more -->
 
-Anyways, One of my friends introduced me to a very interesting startup from Georgia Tech (#GoJackets! :bee:) called [ThunderCompute](https://www.thundercompute.com). They are riding the AI wave and are selling cheap GPU compute. Possibly the cheapest I have ever found so far (?!). The closest I have seen are spot instances given by AWS/GCP/Azure but those are quite risky to run ML workloads since they can be terminated at the provider's will. 
+Anyways, one of my friends introduced me to a very interesting startup from Georgia Tech (#GoJackets! :bee:) called [ThunderCompute](https://www.thundercompute.com). They are riding the AI wave and are selling cheap GPU compute. Possibly the cheapest I have ever found so far (?!). The closest I have seen are spot instances given by AWS/GCP/Azure but those are quite risky to run ML workloads since they can be terminated at the provider's will. 
 
 I was very curious as to how they could possibly offer such low GPU prices with these features:
 
@@ -20,25 +20,25 @@ I was very curious as to how they could possibly offer such low GPU prices with 
 
 How could they be offering a price cheaper than the big cloud players? What are they doing different?
 
-The simple answer is: Oversubscription :stars:
+The simple answer (according to their [articles](https://www.thundercompute.com/blog/how-thunder-compute-works-gpu-over-tcp)) is: Oversubscription :stars:
 
 Fascinated by all this, I decided to make my own GPU-over-TCP but since I'm constrained to my dusty 6-year old MacBook Air with M1 chip with a single GPU, I have to make several changes to what TNR does.
 
 ## Oversubscription
 
-What does what mean? Basically, you sell an item to a user. Then, when the first user is not using the item, you sell the same item to a different user. 
+What does that mean? Basically, you sell an item to a user. Then, when the first user is not using the item, you sell the same item to a different user. 
 
 Oversubscription is actually a pretty common thing. It is literally how banks work, they lend out more money than they actually have. But in a more relevant example, cloud providers also do this.
 
 For example, if you pay for 100GB disk space on your serverless function and you use only 20GB of it, your allocated hardware is maybe oversubscribed to other users. Cloud provider makes a huge saving (which in turn reduces prices) but you still own the right to use your entire 100GB disk space. You gotta be smart enough to keep your utilization % high.
 
-What if happens if every single user decides to utilize 100% of their resources? Idk man what happens if everyone withdrew all their money from the bank? Civilization collapses or sumthing. Just have faith in the [LLN gods](https://en.wikipedia.org/wiki/Law_of_large_numbers) (not a typo) and pray this doesn't happen.
+What happens if every single user decides to utilize 100% of their resources? Idk man what happens if everyone withdrew all their money from the bank? Civilization collapses or sumthing. Just have faith in the [LLN gods](https://en.wikipedia.org/wiki/Law_of_large_numbers) (not a typo) and pray this doesn't happen.
 
-I was very interested how ThuNdeRcompute (TNR) manages to oversubscribe their GPU. The way they do it so simple yet so smart.
+I was very interested in how ThuNdeRcompute (TNR) manages to oversubscribe their GPU. The way they do it is so simple yet so smart.
 
-For many ML workloads, the process stops using the GPU which leads to lot of GPU idle time. For example, if you paid for 1hr of GPU time and only used the GPU for 20 minutes then much of that GPU's capacity remains idle because it's allocated solely to you.
+For many ML workloads, the process stops using the GPU which leads to a lot of GPU idle time. For example, if you paid for 1hr of GPU time and only used the GPU for 20 minutes then much of that GPU's capacity remains idle because it's allocated solely to you.
 
-What if you could run that GPU on a different ML workload that someone else is waiting on? That would be nice but we can't do that since the GPU is literally attached to the CPU that the first user is doing. Oh, but then what if we detach the GPU and make it remote? That way could pool GPU jobs from different users and schedule them as we want. Perhaps connect the CPU and GPU via a network protocol? Yeah let's do this and call it GPU-over-TCP :absolute-cinema:
+What if you could run that GPU on a different ML workload that someone else is waiting on? That would be nice but we can't do that since the GPU is literally attached to the CPU that the first user is on. Oh, but then what if we detach the GPU and make it remote? That way we could pool GPU jobs from different users and schedule them as we want. Perhaps connect the CPU and GPU via a network protocol? Yeah let's do this and call it GPU-over-TCP :absolute-cinema:
 
 So basically, they intercept your code's GPU CUDA calls, forward them over the network via TCP to a real GPU, compute it there, give back the result via TCP again. Sounds simple but insanely hard to achieve. But once you are able to do it, you can oversubscribe your GPUs and make compute cheap and everyone wins!
 
@@ -47,7 +47,7 @@ The obvious downsides are:
 -  _Network latency & throughput_: Moving data from CPU to GPU via PCIe/NVLink bus is faster and has more throughput than TCP.
 -  Not suitable for _all_ workloads: The TNR economics works by identifying GPU idleness and exploiting it. However, if your workload has the GPU running all the time (for example calculating hashes for a certain reason :hint-hint:) then it's not a particularly useful load for the company.
 
-Btw they also have a student program where you get a free $20 in GPU credits (~9hrs of a H100).
+Btw they also have a student program where you get a free $20 in GPU credits (as of August 2026).
 
 ## Hardware & Software Setup
 
@@ -67,7 +67,7 @@ The software setup:
 
 - C++: This is my favorite language.
 - [metal-cpp](https://developer.apple.com/metal/cpp/): An interface that allows me to talk to my GPU in C++.
-- [gRPC](https://grpc.io) for networking: Every time I have to pass data via the network, I thank Google for creating gRPC. It handles so much of the RPC plumbing and provides built-in support for serialization, concurrent requests, retries, and its obviously designed to scale.
+- [gRPC](https://grpc.io) for networking: Every time I have to pass data via the network, I thank Google for creating gRPC. It handles so much of the RPC plumbing and provides built-in support for serialization, concurrent requests, retries, and it's obviously designed to scale.
 - [Protocol buffer](https://protobuf.dev) for serialization.
 - [Bazel](https://bazel.build) for the build system. Pairs nicely with gRPC and protobuf.
 - Shim header: This is 50% of MAR that silently adds a piece code to the user's code that will hijack a subset of metal-cpp calls and convert them to network calls.
@@ -129,7 +129,7 @@ You can find the full source code [here](https://github.com/Dragonado/metal-api-
 
 Before remoting the above code, I knew this would be a much harder and different problem to solve than what TNR is doing. 
 
-On first glance, the project seems like a nice idea. Just copy what TNR does but do it for metal-cpp. I can't seem to find anyone else in the world that has done this kind of thing either. Exciting to be the first to build it!
+On first glance, the project seems like a nice idea. Just copy what TNR does but do it for metal-cpp. I can't seem to find anyone else in the world that has done this kind of thing either. Exciting to build it!
 
 However there are at least two reasons why no one has done this:
 
@@ -243,6 +243,8 @@ The user may expect their code to be compiled in a certain way but since I'm rep
 I literally have a file that is called [metal_hijack.h](https://github.com/Dragonado/metal-api-remoter/blob/main/metal/metal_hijack.h) that just consists of:
 
 ```cpp
+#include "metal_shim.h"
+
 #define MTL MetalShim
 ```
 
@@ -252,7 +254,7 @@ This is interception at compile time.
 
 In conventional discrete NVIDIA GPUs, there is a clear divide between CPU and GPU. In fact, GPUs have their own RAM/cache/memory and stuff. The way the CPU sends data to the GPU is via the PCI Express bus or NVLink that is actually very fast with high throughput.
 
-The `cudaMemcpy` that you usually see in CUDA programs, tell the driver to load and unload data from GPU via some hardware path.
+The `cudaMemcpy` that you usually see in CUDA programs, tells the driver to load and unload data from GPU via some hardware path.
 
 #### The problem
 
@@ -289,7 +291,7 @@ That last line is just a CPU memory write. It does not call Metal, so my shim re
 
 #### The fix
 
-Since my client and server cannot actually share memory, so I compensate by keeping a shadow buffer on the client, copying its bytes to the server at `commit()`, and copying results back after `waitUntilCompleted()`. 
+Since my client and server cannot actually share memory, I compensate by keeping a shadow buffer on the client, copying its bytes to the server at `commit()`, and copying results back after `waitUntilCompleted()`. 
 
 But this requires the programmer to code in a certain way. They have to follow the write-commit-wait-read pattern. So it does not automatically reproduce every asynchronous shared-memory access pattern that native Metal permits.
 
@@ -308,7 +310,7 @@ So device here is pointer that points to some memory 0x123. Clearly it makes no 
 
 So when the client calls this function, we have to have the server mint a new device handle and a mapping of this handle to a `device_id`. The server then passes the `device_id` with some overloaded functions to the client.
 
-So whenver the client then calls a function with the `device` pointer, two things can happen:
+So whenever the client then calls a function with the `device` pointer, two things can happen:
 
 1. The function uses the locally stored metadata sent by the server. For example, `device->name()` is just a string that is stored in the clients memory when the device was first minted by the server.
 2. The function makes a network call to the server. For example, `device->newCommandQueue()` needs a new command queue to be minted. So the function calls the server, but then how does the server know which device handle to use? It has many. Thats where the `device_id` comes in handy. The client has identifed that "hey the device handle that is mapped to `device_id` is what you have to use".
@@ -366,11 +368,9 @@ Status CreateSystemDefaultDeviceShim(ServerContext *context, const CreateSystemD
     }
 ```
 
-You can find the source code [here](https://github.com/Dragonado/metal-api-remoter/blob/main/metal/metal_shim.h). 
-
 ### Rebuilding Metal's object graph with IDs
 
-But we have many Metal objects, not just `Device`. We have objects for command queues, buffers, libraries, functions, compute pipelines states, etc,.
+But we have many Metal objects, not just `Device`. We have objects for command queues, buffers, libraries, functions, compute pipeline states, etc.
 
 All of them need to be minted by the server and then linked by an ID.
 
@@ -389,7 +389,7 @@ Device ID
 
 ### Creation and server-state queries
 
-Any method that creates a real Metal object has to cross the network immediately. For example, `device->newCommandQueue()` sends the `device_id` to the server, which looks up the real device, creates a real `MTL::CommandQueue`, stores it, and returns a new `command_queue_id`. The client cannot continue until it gets that ID, so creation RPCs have to be blocking synchronous network calls.
+Any method that creates a real Metal object has to cross the network immediately. For example, `device->newCommandQueue()` sends the `device_id` to the server, which looks up the real device, creates a real `MTL::CommandQueue`, stores it, and returns a new `command_queue_id`. The client cannot continue until it gets that ID, so for the inital design, creation RPCs are made to be blocking synchronous network calls.
 
 Queries are different. Stable properties such as `device->name()` and a pipeline's maximum thread count are returned when the object is created and cached in the client proxy. Querying them later is then just a local function call. State that cannot be cached would still need an RPC.
 
@@ -418,13 +418,13 @@ At `commit()`, the client sends the command-queue ID, pipeline-state ID, grid si
 
 The server does this directly inside the `CommitCommandBuffer` RPC. It looks up the real queue, pipeline, and buffers, creates a native Metal command buffer and compute encoder, copies the packed input bytes into the real buffers, restores every buffer binding, and calls the real `dispatchThreads()` and `commit()`.
 
-It then stores the native command-buffer pointer in `command_buffer_map_` under a new ID and returns that ID to the client. There is no job state machine, scheduler thread, or completion callback yet. The RPC simply submits the work to Metal and returned. The future section will have why it's necessary to have these things when scaling.
+For the initial version, the server stores the native command-buffer pointer in `command_buffer_map_` under a new ID and returns that ID to the client. There is no job state machine, scheduler thread, or completion callback yet. The RPC simply submits the work to Metal and returns. The future section will explain why it's necessary to have these things when scaling.
 
 ### Server -> client flow
 
 `waitUntilCompleted()` sends the `command_buffer_id` back to the server. The initial handler looked up the native pointer in `command_buffer_map_` and directly called Metal's `command_buffer->waitUntilCompleted()`. The gRPC handler stayed blocked until the GPU work finished.
 
-The server then concatenates the contents of the real buffers into the response. The client splits those bytes using the known buffer lengths and copies them into its shadow buffers. From the original program's point of view, the same pointers returned by `Buffer::contents()` now contains the GPU's results.
+The server then concatenates the contents of the real buffers into the response. The client splits those bytes using the known buffer lengths and copies them into its shadow buffers. From the original program's point of view, the same pointers returned by `Buffer::contents()` now contain the GPU's results.
 
 So after `waitUntilCompleted()` the involved client buffers and server buffers are in sync!
 
@@ -488,7 +488,7 @@ One small problem tho: My code literally cannot reliably handle more than 1 clie
 This implementation has two obvious multi-client problems.
 
 1.  Without synchronization, concurrent RPC handlers could race while incrementing stateful objects `counter_` or reading and writing the handle maps. For example, 1 thread would read and increment the value of `device_id` while the other thread still reads the old `device_id` value. This would map the same `device_id` to two different handles which is disastrous.
-2. Putting one giant lock around every handler prevents those races, but holding that lock while waiting for the GPU serializes the entire things. Client B cannot even enqueue ready work while client A is blocked in a completely unrelated RPC.
+2. Putting one giant lock around every handler prevents those races, but holding that lock while waiting for the GPU serializes the entire server. Client B cannot even enqueue ready work while client A is blocked in a completely unrelated RPC.
 
 The solution to this is, yet again, **STATE MACHINES**! More precisely, I needed protected shared state plus a state machine for every asynchronous job.
 
@@ -497,7 +497,7 @@ I encountered this same problem in my [previous blog](https://www.chaithu.in/blo
 
 ### My beautiful Stateful machine
 
-Now that we queue jobs, we need a way to find to define what kind of state the job can be in.
+Now that we queue jobs, we need a way to define what kind of state the job can be in.
 
 ```cpp
 enum class JobState {
@@ -525,13 +525,13 @@ We of course need to add mutex and server_shutdown for our server.
   //....
   private:
     std::atomic<uint32_t> counter_;
-    std::mutex mtx_; // efficiency can be improved if we used mutliple mutexes.
+    std::mutex mtx_; // efficiency can be improved if we used multiple mutexes.
     std::condition_variable scheduler_cv_;
 
     std::deque<std::shared_ptr<Job>> ready_jobs_;
     std::map<uint32_t, std::shared_ptr<Job>> job_map_;
 
-    // This is a dedicated thread whose only purpose is to recieve jobs and schedules them to the GPU according to its scheduling algo.
+    // This is a dedicated thread whose only purpose is to recieve jobs and schedule them to the GPU according to its scheduling algo.
     std::thread scheduler_thread_;
 
     // A way to communicate with all threads that server needs to shutdown.
@@ -577,7 +577,7 @@ void scheduler_loop() {
 
 Now we have a new problem to solve. Suppose the scheduler has `N` jobs in its queue. Which one does it choose to dispatch to the GPU?
 
-You can have infinite complexity here and optimise for many things like time, cost, efficiency, etc,. However there is an invariant that all scheduling algorithms must follow to maintain correctness!
+You can have infinite complexity here and optimise for many things like time, cost, efficiency, etc. However there is an invariant that all scheduling algorithms must follow to maintain correctness!
 
 The ordering invariant is simple: suppose the client commits command buffer `c1` before `c2`. If both came from the same command queue, the server must submit `c1` before `c2`. Jobs from different queues have no ordering dependency.
 
@@ -609,7 +609,7 @@ Most notable:
 
 - Classic example: `counter_++` is obviously not an atomic operation. It is load, increment & store.
 - Reading from `std::map` while another thread writes to it is undefined behaviour.
-- Server shutdown had a classic lost-wakeup bug. I would notify the scheduler thread to shutdown but the scheduler would be doing some work at the time and ignore the notification since it wouldnt be on the conditional variable.
+- Server shutdown had a classic lost-wakeup bug. I would notify the scheduler thread to shutdown but the scheduler would be doing some work at the time and ignore the notification since it wouldnt be on the condition variable.
 
 After fixing all bugs, the 100 clients completed and verified their results!
 
@@ -628,22 +628,23 @@ Some caveats of MAR that won't generalize to all metal programs:
 - Limited API coverage: MAR implements only the compute methods required by the demo, not the entire Metal API.
 - Buffer copies: Every commit and wait currently transfers each bound buffer in full, even if only a few bytes changed.
 - Snapshot coherence: The server only observes buffer contents at commit() and after waitUntilCompleted(). CPU writes made while GPU work is running cannot be reproduced correctly because the buffers are not in sync.
+- MacOS client requirement: The client requires Apple's Foundation libraries to be able to run the code. Even though the client is not touching it's own GPU.
 - Object lifetime issues: Client buffer proxies must survive until wait, and queued jobs do not yet retain server resources exactly like native Metal.
 
-These limitations are accepted MVP boundaries, not claims of production GPU virtualization. I will not be resolving anytime soon (or ever?).
+These limitations are accepted MVP boundaries, not claims of production GPU virtualization. I will not be resolving them anytime soon (or ever?).
 
 Pitfalls faced:
 
 - gRPC runs handlers concurrently but that does not make the service object's maps, counters, or queues thread-safe. You have to manage those yourself.
 - One global lock can remove data races while accidentally serializing the entire server if it is held during a GPU wait. But this is a very brute-force approach that essentially acts single-threaded.
-- A condition-variable notification has no memory. A thread only recieves the notification if it is explicitly waiting for it, otherwise it gets missed.
+- A condition-variable notification has no memory. A thread only receives the notification if it is explicitly waiting for it, otherwise it gets missed.
 - Parallel programming is hard. It requires multi-threading, explicit ownership, job states, completion signaling, and cleanup.
 
-At the end of the day, API compatibility means preserving observable behavior. Under the hood we can do whatever we want tbh. The user doesn't care as long is it works correctly and works fast enough.
+At the end of the day, API compatibility means preserving observable behavior. Under the hood we can do whatever we want tbh. The user doesn't care as long as it works correctly and works fast enough.
 
 
 ## Closing remarks
 
 What started as "hey this is an interesting company, how are they doing this?" turned into an awesome systems project about dynamic dispatch, remote object identity, reconstructing transfers from unified memory, and concurrent command scheduling. I'm glad I jumped in this rabbit hole and I learnt a lot.
 
-What I have right now is definitely not some production grade Metal API remoter. It is simply a working proof that a useful subset of `metal-cpp` can be turned into a network protocol without changing the application's Metal calls.
+What I have right now is definitely not some production grade Metal API remoter. It is simply a working proof that a useful subset of `metal-cpp` can be turned into a network protocol without changing the application's Metal source.
