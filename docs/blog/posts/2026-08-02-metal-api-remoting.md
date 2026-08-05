@@ -47,7 +47,7 @@ The obvious downsides are:
 -  _Network latency & throughput_: Moving data from CPU to GPU via PCIe/NVLink bus is faster and has more throughput than TCP.
 -  Not suitable for _all_ workloads: The TNR economics works by identifying GPU idleness and exploiting it. However, if your workload has the GPU running all the time (for example calculating hashes for a certain reason :hint-hint:) then it's not a particularly useful load for the company.
 
-Btw they also have a student program where you get a free $20 in GPU credits (as of August 2026).
+Btw they also have a student program where you get a free $20 in GPU cred (as of August 2026).
 
 ## Hardware & Software Setup
 
@@ -57,7 +57,7 @@ My hardware:
 
 You might be wondering where the other hardware is located? After all I have to pass data from one device to the other over the network.
 
-Yeah, I can't be bothered to rent out at a cloud apple GPU instance and go through the hassle of setting up the networking for it. I'm just gonna forward the network calls to localhost and have my own device intercept and run its own code lol.
+Yeah, I can't be bothered to rent out at a cloud apple GPU instance and go through the hassle of setting up the networking for it. I'm just gonna forward the network calls to localhost and have my own device intercept and run it's own code lol.
 
 It'll make more sense when you read the next sections but here is the architecture setup:
 
@@ -389,7 +389,7 @@ Device ID
 
 ### Creation and server-state queries
 
-Any method that creates a real Metal object has to cross the network immediately. For example, `device->newCommandQueue()` sends the `device_id` to the server, which looks up the real device, creates a real `MTL::CommandQueue`, stores it, and returns a new `command_queue_id`. The client cannot continue until it gets that ID, so for the inital design, creation RPCs are made to be blocking synchronous network calls.
+For my initial design, any method that creates a real Metal object has to cross the network immediately. For example, `device->newCommandQueue()` sends the `device_id` to the server, which looks up the real device, creates a real `MTL::CommandQueue`, stores it, and returns a new `command_queue_id`. The client cannot continue until it gets that ID creation RPCs are made to be blocking synchronous network calls.
 
 Queries are different. Stable properties such as `device->name()` and a pipeline's maximum thread count are returned when the object is created and cached in the client proxy. Querying them later is then just a local function call. State that cannot be cached would still need an RPC.
 
@@ -531,7 +531,7 @@ We of course need to add mutex and server_shutdown for our server.
     std::deque<std::shared_ptr<Job>> ready_jobs_;
     std::map<uint32_t, std::shared_ptr<Job>> job_map_;
 
-    // This is a dedicated thread whose only purpose is to recieve jobs and schedule them to the GPU according to its scheduling algo.
+    // This is a dedicated thread whose only purpose is to receive jobs and schedule them to the GPU according to its scheduling algo.
     std::thread scheduler_thread_;
 
     // A way to communicate with all threads that server needs to shutdown.
@@ -628,7 +628,7 @@ Some caveats of MAR that won't generalize to all metal programs:
 - Limited API coverage: MAR implements only the compute methods required by the demo, not the entire Metal API.
 - Buffer copies: Every commit and wait currently transfers each bound buffer in full, even if only a few bytes changed.
 - Snapshot coherence: The server only observes buffer contents at commit() and after waitUntilCompleted(). CPU writes made while GPU work is running cannot be reproduced correctly because the buffers are not in sync.
-- MacOS client requirement: The client requires Apple's Foundation libraries to be able to run the code. Even though the client is not touching it's own GPU.
+- macOS client requirement: The client requires Apple's Foundation libraries to be able to run the code. Even though the client is not touching it's own GPU.
 - Object lifetime issues: Client buffer proxies must survive until wait, and queued jobs do not yet retain server resources exactly like native Metal.
 
 These limitations are accepted MVP boundaries, not claims of production GPU virtualization. I will not be resolving them anytime soon (or ever?).
@@ -647,4 +647,4 @@ At the end of the day, API compatibility means preserving observable behavior. U
 
 What started as "hey this is an interesting company, how are they doing this?" turned into an awesome systems project about dynamic dispatch, remote object identity, reconstructing transfers from unified memory, and concurrent command scheduling. I'm glad I jumped in this rabbit hole and I learnt a lot.
 
-What I have right now is definitely not some production grade Metal API remoter. It is simply a working proof that a useful subset of `metal-cpp` can be turned into a network protocol without changing the application's Metal source.
+What I have right now is definitely not some production-grade Metal API remoter. It is simply a working proof that a useful subset of `metal-cpp` can be turned into a network protocol without changing the application's Metal source.
