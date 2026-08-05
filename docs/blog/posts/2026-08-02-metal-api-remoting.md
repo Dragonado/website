@@ -45,7 +45,7 @@ So basically, they intercept your code's GPU CUDA calls, forward them over the n
 The obvious downsides are:
 
 -  _Network latency & throughput_: Moving data from CPU to GPU via PCIe/NVLink bus is faster and has more throughput than TCP.
--  Not suitable for _all_ workloads: The TNR economics works by identifying GPU idleness and exploiting it. However, if your workload has the GPU running all the time (for example calculating hashes for a certain reason :hint-hint:) then it's not a particularly useful load for the company.
+-  Not suitable for _all_ workloads: The economics of oversubscribing works by identifying GPU idleness and exploiting it. However, if I had to guess, workloads that keep the GPU running all the time (for example calculating hashes for whatever reason :eyes:) aren't a particularly useful load for the company
 
 Btw they also have a student program where you get a free $20 in GPU cred (as of August 2026).
 
